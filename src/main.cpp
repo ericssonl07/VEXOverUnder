@@ -17,7 +17,7 @@ vex::brain brain;
 vex::controller controller;
 
 #define BASE_WIDTH 31.7 // centimeters
-#define WHEEL_DIAMETER 8.3 // centimeters
+#define WHEEL_RADIUS 4.15 // centimeters
 
 double x_position, y_position, rotation_value;
 double x() { return x_position; }
@@ -47,15 +47,15 @@ double to_deg(double radian_measure) {
 }
 void track(void) {
     const constexpr double base_width = BASE_WIDTH;
-    const constexpr double wheel_diameter = WHEEL_DIAMETER;
+    const constexpr double wheel_radius = WHEEL_RADIUS;
     const constexpr double degree_radian = 3.14159265358979323846 / 180.0;
     double left_position, right_position;
     double last_left_position, last_right_position;
     double delta_left_position, delta_right_position;
     double delta_rotation;
     double center_radius, local_x_translation, local_offset;
-    auto get_left = [] () -> double { return (left_motor_2_bottom.position(vex::deg) + left_motor_1.position(vex::deg)) * 0.25 * degree_radian * wheel_diameter; }; // factor halved (unsure on source of doubling currently)
-    auto get_right = [] () -> double { return (right_motor_2_bottom.position(vex::deg) + right_motor_1.position(vex::deg)) * 0.25 * degree_radian * wheel_diameter; }; // factor halved
+    auto get_left = [] () -> double { return (left_motor_2_bottom.position(vex::deg) + left_motor_1.position(vex::deg)) * 0.5 * degree_radian * wheel_radius; }; // factor halved (unsure on source of doubling currently)
+    auto get_right = [] () -> double { return (right_motor_2_bottom.position(vex::deg) + right_motor_1.position(vex::deg)) * 0.5 * degree_radian * wheel_radius; }; // factor halved
     x_position = 0.0;
     y_position = 0.0;
     rotation_value = 0.0;
