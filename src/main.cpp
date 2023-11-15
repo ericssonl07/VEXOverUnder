@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <thread>
 #include <vex.h>
+#include <pid.hpp>
 
 vex::motor left_motor_1(vex::PORT3, vex::gearSetting::ratio6_1, true);
 vex::motor left_motor_2_top(vex::PORT1, vex::gearSetting::ratio6_1, false);
@@ -25,13 +26,14 @@ double y() { return y_position; }
 double to_rad(double degree_measure);
 double to_deg(double radian_measure);
 double rotation() { return to_deg(rotation_value); }
-void track(void);
-void pos_read(void);
+int track();
 
 int main(int argc, const char * argv[]) {
     vex::thread tracking(track);
     while (true) {
-        brain.Screen.print("%.2lf %.2lf %.2lf", x(), y(), rotation());
+        brain.Screen.setCursor(1, 1);
+        brain.Screen.print("(%.2lf %.2lf) heading %.2lf", x(), y(), rotation());
+        vex::wait(25, vex::msec);
     }
     tracking.join();
 }
@@ -45,7 +47,7 @@ double to_deg(double radian_measure) {
     static const constexpr double conversion = 180.0 / 3.14159265358979323846;
     return radian_measure * conversion;
 }
-void track(void) {
+int track() {
     const constexpr double base_width = BASE_WIDTH;
     const constexpr double wheel_radius = WHEEL_RADIUS;
     const constexpr double degree_radian = 3.14159265358979323846 / 180.0;
@@ -54,8 +56,8 @@ void track(void) {
     double delta_left_position, delta_right_position;
     double delta_rotation;
     double center_radius, local_x_translation, local_offset;
-    auto get_left = [] () -> double { return (left_motor_2_bottom.position(vex::deg) + left_motor_1.position(vex::deg)) * 0.5 * degree_radian * wheel_radius; }; // factor halved (unsure on source of doubling currently)
-    auto get_right = [] () -> double { return (right_motor_2_bottom.position(vex::deg) + right_motor_1.position(vex::deg)) * 0.5 * degree_radian * wheel_radius; }; // factor halved
+    auto get_left = [] () -> double { return ((left_motor_2_bottom.position(vex::deg) + left_motor_1.position(vex::deg)) * 0.5 * degree_radian * wheel_radius + 1.84) / 1.68; }; // cursed correction factors
+    auto get_right = [] () -> double { return ((right_motor_2_bottom.position(vex::deg) + right_motor_1.position(vex::deg)) * 0.5 * degree_radian * wheel_radius + 1.84) / 1.68; }; // cursed correction factors
     x_position = 0.0;
     y_position = 0.0;
     rotation_value = 0.0;
@@ -79,12 +81,7 @@ void track(void) {
         x_position += local_x_translation * cos(local_offset);
         y_position += local_x_translation * sin(local_offset);
         rotation_value += delta_rotation;
+        vex::this_thread::sleep_for(10);
     }
-}
-void pos_read(void) {
-    while (true) {
-        vexDelay(2000);
-        std::cout << x() << ' ' << y() << ' ' << rotation() << '\n';
-        brain.Screen.print("%.2lf %.2lf %.2lf", x(), y(), rotation());
-    }
+    return 0;
 }
