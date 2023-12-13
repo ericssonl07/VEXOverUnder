@@ -4,21 +4,32 @@
 #include <vex.h>
 #include <pid.hpp>
 
+/*
+
+control period: add callback functions for automatic actions
+
+*/
+
 vex::motor left_motor_1(vex::PORT3, vex::gearSetting::ratio6_1, true);
-vex::motor left_motor_2_top(vex::PORT1, vex::gearSetting::ratio6_1, false);
+vex::motor left_motor_2_top(vex::PORT9, vex::gearSetting::ratio6_1, false);
 vex::motor left_motor_2_bottom(vex::PORT2, vex::gearSetting::ratio6_1, true);
 
 vex::motor right_motor_1(vex::PORT6, vex::gearSetting::ratio6_1, false);
-vex::motor right_motor_2_top(vex::PORT4, vex::gearSetting::ratio6_1, true);
+vex::motor right_motor_2_top(vex::PORT8, vex::gearSetting::ratio6_1, true);
 vex::motor right_motor_2_bottom(vex::PORT5, vex::gearSetting::ratio6_1, false);
 
 vex::motor_group left(left_motor_2_top, left_motor_2_bottom, left_motor_1);
 vex::motor_group right(right_motor_2_top, right_motor_2_bottom, right_motor_1);
+
 vex::brain brain;
 vex::controller controller;
 
+vex::pneumatics pneumatics(brain.ThreeWirePort.A);
+
 #define BASE_WIDTH 31.7 // centimeters
 #define WHEEL_RADIUS 4.15 // centimeters
+#define PID_TURN_PARAMS 13.5, 0.01, 0.8, 0.999 // parameter pack (kp, ki, kd, ir)
+#define PID_LINEAR_PARAMS 2.0, 0.0, 0.0, 0.999 // parameter pack (kp, ki, kd, ir)
 
 double x_position, y_position, rotation_value;
 double x() { return x_position; }
@@ -27,17 +38,55 @@ double to_rad(double degree_measure);
 double to_deg(double radian_measure);
 double rotation() { return to_deg(rotation_value); }
 int track();
+void set_heading(double heading);
+void move(double x, double y);
+int display();
+int controlling();
 
 int main(int argc, const char * argv[]) {
     vex::thread tracking(track);
-    while (true) {
-        brain.Screen.setCursor(1, 1);
-        brain.Screen.print("(%.2lf %.2lf) heading %.2lf", x(), y(), rotation());
-        vex::wait(25, vex::msec);
-    }
+    // vex::thread control(controlling);
+    vex::thread displaying(display);
+    // brain.Screen.print("Hi\n");
+
+    // int n = 5;
+    // while (n--) {
+    //     set_heading(to_rad(90));
+    //     vexDelay(3000);
+    //     set_heading(to_rad(0));
+    //     vexDelay(3000);
+    // }
+
+    move(50, 0);
+    // move(-50, 0);
     tracking.join();
 }
 
+int controlling() {
+    auto toggle_pneumatics = [] () -> void {
+        static bool on = false;
+        if (on) {
+            pneumatics.close();
+            on = false;
+        } else {
+            pneumatics.open();
+            on = true;
+        }
+    };
+    while (true) {
+        double fwdpower = controller.Axis3.position();
+        double turnpower = controller.Axis1.position();
+        left.spin(vex::fwd, fwdpower + turnpower, vex::pct);
+        right.spin(vex::fwd, fwdpower - turnpower, vex::pct);
+        if (controller.ButtonL1.pressing()) {
+            pneumatics.open();
+        } else {
+            pneumatics.close();
+        }
+        controller.ButtonL1.pressed(toggle_pneumatics);
+    }
+    vex::this_thread::sleep_for(10);
+}
 
 double to_rad(double degree_measure) {
     static const constexpr double conversion = 3.14159265358979323846 / 180.0;
@@ -48,16 +97,26 @@ double to_deg(double radian_measure) {
     return radian_measure * conversion;
 }
 int track() {
-    const constexpr double base_width = BASE_WIDTH;
-    const constexpr double wheel_radius = WHEEL_RADIUS;
-    const constexpr double degree_radian = 3.14159265358979323846 / 180.0;
+    static const constexpr double base_width = BASE_WIDTH;
+    static const constexpr double wheel_radius = WHEEL_RADIUS;
+    static const constexpr double degree_radian = 3.14159265358979323846 / 180.0;
     double left_position, right_position;
     double last_left_position, last_right_position;
     double delta_left_position, delta_right_position;
     double delta_rotation;
     double center_radius, local_x_translation, local_offset;
-    auto get_left = [] () -> double { return ((left_motor_2_bottom.position(vex::deg) + left_motor_1.position(vex::deg)) * 0.5 * degree_radian * wheel_radius + 1.84) / 1.68; }; // cursed correction factors
-    auto get_right = [] () -> double { return ((right_motor_2_bottom.position(vex::deg) + right_motor_1.position(vex::deg)) * 0.5 * degree_radian * wheel_radius + 1.84) / 1.68; }; // cursed correction factors
+    auto get_left = [] () -> double {
+        return (
+            (left_motor_2_bottom.position(vex::deg) + left_motor_1.position(vex::deg)) * 0.5 * degree_radian * wheel_radius + 1.84
+        ) / 1.68;
+    }; // cursed correction factors
+    auto get_right = [] () -> double {
+        return (
+            (right_motor_2_bottom.position(vex::deg) + right_motor_1.position(vex::deg)) * 0.5 * degree_radian * wheel_radius + 1.84
+        ) / 1.68;
+    }; // cursed correction factors
+    // auto get_left = [] () -> double { return ((left_motor_2_bottom.position(vex::deg) + left_motor_1.position(vex::deg)) * 0.5 * degree_radian * wheel_radius); }; // cursed correction factors
+    // auto get_right = [] () -> double { return ((right_motor_2_bottom.position(vex::deg) + right_motor_1.position(vex::deg)) * 0.5 * degree_radian * wheel_radius); }; // cursed correction factors
     x_position = 0.0;
     y_position = 0.0;
     rotation_value = 0.0;
@@ -84,4 +143,62 @@ int track() {
         vex::this_thread::sleep_for(10);
     }
     return 0;
+}
+void set_heading(double heading) {
+    auto nearest_coterminal = [] (double rotation, double heading) -> double {
+        static double pi2 = M_PI * 2, divpi2 = 1 / pi2;
+        return floor((rotation - heading + M_PI) * divpi2) * pi2 + heading;
+    };
+    double target_rotation = nearest_coterminal(to_rad(rotation()), heading);
+    PID turn(PID_TURN_PARAMS);
+    turn.init(to_rad(rotation()), target_rotation);
+    while (fabs(to_rad(rotation()) - target_rotation) > 0.0174532925199) {
+        double turn_power = turn.output(to_rad(rotation()));
+        right.spin(vex::fwd, turn_power, vex::pct);
+        left.spin(vex::fwd, -turn_power, vex::pct);
+    }
+    left.stop();
+    right.stop();
+}
+void move(double target_x, double target_y) {
+    auto distance = [] (double x, double y) -> double {
+        return pow(x * x + y * y, 0.5);
+    };
+    auto nearest_coterminal = [] (double rotation, double heading) -> double {
+        static double pi2 = M_PI * 2, divpi2 = 1 / pi2;
+        return floor((rotation - heading + M_PI) * divpi2) * pi2 + heading;
+    };
+    auto get_heading = [] (double x, double y) -> double {
+        double heading = atan(y / x);
+        if ((x < 0 and y > 0) or (x < 0 and y < 0)) {
+            return heading + M_PI;
+        } else if (x > 0 and y < 0) {
+            return heading + M_PI_2;
+        } else {
+            return heading;
+        }
+    };
+    double relative_x = target_x - x(), relative_y = target_y - y();
+    double target_rotation = nearest_coterminal(to_rad(rotation()), get_heading(relative_x, relative_y));
+    set_heading(get_heading(relative_x, relative_y));
+    PID turn(PID_TURN_PARAMS), forward(PID_LINEAR_PARAMS);
+    turn.init(get_heading(relative_x, relative_y), target_rotation);
+    forward.init(-distance(relative_x, relative_y), 0);
+    while (distance(relative_x, relative_y) > 3 or fabs(to_rad(rotation()) - target_rotation) > 0.0174532925199) {
+        double fwd_power = forward.output(-distance(relative_x, relative_y));
+        double turn_power = turn.output(to_rad(rotation()));
+        left.spin(vex::fwd, fwd_power - turn_power, vex::pct);
+        right.spin(vex::fwd, fwd_power + turn_power, vex::pct);
+        relative_x = target_x - x(), relative_y = target_y - y();
+        turn.change_target(nearest_coterminal(to_rad(rotation()), get_heading(relative_x, relative_y)));
+    }
+}
+
+int display() {
+    while (true) {
+        brain.Screen.clearScreen();
+        brain.Screen.setCursor(1, 1);
+        brain.Screen.print("%.2f %.2f %.2f", x(), y(), rotation());
+        vex::this_thread::sleep_for(10);
+    }
 }
