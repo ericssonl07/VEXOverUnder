@@ -29,7 +29,7 @@ vex::pneumatics pneumatics(brain.ThreeWirePort.A);
 #define BASE_WIDTH 31.7 // centimeters
 #define WHEEL_RADIUS 4.15 // centimeters
 #define PID_TURN_PARAMS 13.5, 0.01, 0.8, 0.999 // parameter pack (kp, ki, kd, ir)
-#define PID_LINEAR_PARAMS 2.0, 0.0, 0.0, 0.999 // parameter pack (kp, ki, kd, ir)
+#define PID_LINEAR_PARAMS 1.25, 0.0002, 0.05, 0.999 // parameter pack (kp, ki, kd, ir)
 
 double x_position, y_position, rotation_value;
 double x() { return x_position; }
@@ -38,8 +38,8 @@ double to_rad(double degree_measure);
 double to_deg(double radian_measure);
 double rotation() { return to_deg(rotation_value); }
 int track();
-void set_heading(double heading);
-void move(double x, double y);
+void set_heading(double heading, double rot_tolerance = 0.0174532925199);
+void move(double x, double y, double dist_tolerance = 0.5, double rot_tolerance = 0.0174532925199);
 int display();
 int controlling();
 
@@ -56,8 +56,10 @@ int main(int argc, const char * argv[]) {
     //     set_heading(to_rad(0));
     //     vexDelay(3000);
     // }
-
-    move(50, 0);
+    vexDelay(3000);
+    move(10, 0, 0.5, 0.0174532925199);
+    vexDelay(3000);
+    move(40, 30, 2.5, 0.0154532925199);
     // move(-50, 0);
     tracking.join();
 }
@@ -96,6 +98,71 @@ double to_deg(double radian_measure) {
     static const constexpr double conversion = 180.0 / 3.14159265358979323846;
     return radian_measure * conversion;
 }
+void set_heading(double heading, double rot_tolerance) {
+    auto nearest_coterminal = [] (double rotation, double heading) -> double {
+        static double pi2 = M_PI * 2, divpi2 = 1 / pi2;
+        return floor((rotation - heading + M_PI) * divpi2) * pi2 + heading;
+    };
+    double target_rotation = nearest_coterminal(to_rad(rotation()), heading);
+    PID turn(PID_TURN_PARAMS);
+    turn.init(to_rad(rotation()), target_rotation);
+    while (fabs(to_rad(rotation()) - target_rotation) > rot_tolerance) {
+        double turn_power = turn.output(to_rad(rotation()));
+        // double turn_power = 0;
+        right.spin(vex::fwd, turn_power, vex::pct);
+        left.spin(vex::fwd, -turn_power, vex::pct);
+    }
+    left.stop();
+    right.stop();
+}
+void move(double target_x, double target_y, double dist_tolerance, double rot_tolerance) {
+    auto distance = [] (double x, double y) -> double {
+        return pow(x * x + y * y, 0.5);
+    };
+    auto nearest_coterminal = [] (double rotation, double heading) -> double {
+        static double pi2 = M_PI * 2, divpi2 = 1 / pi2;
+        return floor((rotation - heading + M_PI) * divpi2) * pi2 + heading;
+    };
+    auto get_heading = [] (double x, double y) -> double {
+        double heading = atan(y / x);
+        if ((x < 0 and y > 0) or (x < 0 and y < 0)) {
+            return heading + M_PI;
+        } else if (x > 0 and y < 0) {
+            return heading + M_PI_2;
+        } else {
+            return heading;
+        }
+    };
+    double relative_x = target_x - x(), relative_y = target_y - y();
+    double target_rotation = nearest_coterminal(to_rad(rotation()), get_heading(relative_x, relative_y));
+    set_heading(get_heading(relative_x, relative_y), rot_tolerance);
+    vexDelay(1000);
+    PID turn(PID_TURN_PARAMS), forward(PID_LINEAR_PARAMS);
+    turn.init(get_heading(relative_x, relative_y), target_rotation);
+    forward.init(-distance(relative_x, relative_y), 0);
+    while (distance(relative_x, relative_y) > dist_tolerance) {
+        double fwd_power = forward.output(-distance(relative_x, relative_y));
+        // double turn_power = turn.output(to_rad(rotation()));
+        double turn_power = 0;
+        left.spin(vex::fwd, fwd_power - turn_power, vex::pct);
+        right.spin(vex::fwd, fwd_power + turn_power, vex::pct);
+        relative_x = target_x - x(), relative_y = target_y - y();
+        turn.change_target(nearest_coterminal(to_rad(rotation()), get_heading(relative_x, relative_y)));
+    }
+    left.stop();
+    right.stop();
+}
+
+int display() {
+    while (true) {
+        brain.Screen.clearScreen();
+        brain.Screen.setCursor(1, 1);
+        brain.Screen.print("%.2f %.2f %.2f", x(), y(), rotation());
+        vex::this_thread::sleep_for(10);
+    }
+}
+
+
 int track() {
     static const constexpr double base_width = BASE_WIDTH;
     static const constexpr double wheel_radius = WHEEL_RADIUS;
@@ -143,62 +210,4 @@ int track() {
         vex::this_thread::sleep_for(10);
     }
     return 0;
-}
-void set_heading(double heading) {
-    auto nearest_coterminal = [] (double rotation, double heading) -> double {
-        static double pi2 = M_PI * 2, divpi2 = 1 / pi2;
-        return floor((rotation - heading + M_PI) * divpi2) * pi2 + heading;
-    };
-    double target_rotation = nearest_coterminal(to_rad(rotation()), heading);
-    PID turn(PID_TURN_PARAMS);
-    turn.init(to_rad(rotation()), target_rotation);
-    while (fabs(to_rad(rotation()) - target_rotation) > 0.0174532925199) {
-        double turn_power = turn.output(to_rad(rotation()));
-        right.spin(vex::fwd, turn_power, vex::pct);
-        left.spin(vex::fwd, -turn_power, vex::pct);
-    }
-    left.stop();
-    right.stop();
-}
-void move(double target_x, double target_y) {
-    auto distance = [] (double x, double y) -> double {
-        return pow(x * x + y * y, 0.5);
-    };
-    auto nearest_coterminal = [] (double rotation, double heading) -> double {
-        static double pi2 = M_PI * 2, divpi2 = 1 / pi2;
-        return floor((rotation - heading + M_PI) * divpi2) * pi2 + heading;
-    };
-    auto get_heading = [] (double x, double y) -> double {
-        double heading = atan(y / x);
-        if ((x < 0 and y > 0) or (x < 0 and y < 0)) {
-            return heading + M_PI;
-        } else if (x > 0 and y < 0) {
-            return heading + M_PI_2;
-        } else {
-            return heading;
-        }
-    };
-    double relative_x = target_x - x(), relative_y = target_y - y();
-    double target_rotation = nearest_coterminal(to_rad(rotation()), get_heading(relative_x, relative_y));
-    set_heading(get_heading(relative_x, relative_y));
-    PID turn(PID_TURN_PARAMS), forward(PID_LINEAR_PARAMS);
-    turn.init(get_heading(relative_x, relative_y), target_rotation);
-    forward.init(-distance(relative_x, relative_y), 0);
-    while (distance(relative_x, relative_y) > 3 or fabs(to_rad(rotation()) - target_rotation) > 0.0174532925199) {
-        double fwd_power = forward.output(-distance(relative_x, relative_y));
-        double turn_power = turn.output(to_rad(rotation()));
-        left.spin(vex::fwd, fwd_power - turn_power, vex::pct);
-        right.spin(vex::fwd, fwd_power + turn_power, vex::pct);
-        relative_x = target_x - x(), relative_y = target_y - y();
-        turn.change_target(nearest_coterminal(to_rad(rotation()), get_heading(relative_x, relative_y)));
-    }
-}
-
-int display() {
-    while (true) {
-        brain.Screen.clearScreen();
-        brain.Screen.setCursor(1, 1);
-        brain.Screen.print("%.2f %.2f %.2f", x(), y(), rotation());
-        vex::this_thread::sleep_for(10);
-    }
 }
