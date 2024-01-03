@@ -12,10 +12,10 @@ control period: add callback functions for automatic actions
 
 vex::motor left_motor_1(vex::PORT3, vex::gearSetting::ratio6_1, true);
 vex::motor left_motor_2_top(vex::PORT9, vex::gearSetting::ratio6_1, false);
-vex::motor left_motor_2_bottom(vex::PORT2, vex::gearSetting::ratio6_1, true);
+vex::motor left_motor_2_bottom(vex::PORT8, vex::gearSetting::ratio6_1, true);
 
 vex::motor right_motor_1(vex::PORT6, vex::gearSetting::ratio6_1, false);
-vex::motor right_motor_2_top(vex::PORT8, vex::gearSetting::ratio6_1, true);
+vex::motor right_motor_2_top(vex::PORT10, vex::gearSetting::ratio6_1, true);
 vex::motor right_motor_2_bottom(vex::PORT5, vex::gearSetting::ratio6_1, false);
 
 vex::motor_group left(left_motor_2_top, left_motor_2_bottom, left_motor_1);
@@ -28,7 +28,7 @@ vex::pneumatics pneumatics(brain.ThreeWirePort.A);
 
 #define BASE_WIDTH 31.7 // centimeters
 #define WHEEL_RADIUS 4.15 // centimeters
-#define PID_TURN_PARAMS 13.5, 0.01, 0.8, 0.999 // parameter pack (kp, ki, kd, ir)
+#define PID_TURN_PARAMS 10.0, 0.001, 0.8, 0.999 // parameter pack (kp, ki, kd, ir)
 #define PID_LINEAR_PARAMS 1.25, 0.0002, 0.05, 0.999 // parameter pack (kp, ki, kd, ir)
 
 double x_position, y_position, rotation_value;
@@ -42,24 +42,30 @@ void set_heading(double heading, double rot_tolerance = 0.0174532925199);
 void move(double x, double y, double dist_tolerance = 0.5, double rot_tolerance = 0.0174532925199);
 int display();
 int controlling();
+double power_processing(double power);
 
 int main(int argc, const char * argv[]) {
     vex::thread tracking(track);
     // vex::thread control(controlling);
     vex::thread displaying(display);
     // brain.Screen.print("Hi\n");
+    // left.spin(vex::fwd, 10, vex::pct);
+    while (true) right.spin(vex::fwd, 50, vex::pct);
 
-    // int n = 5;
-    // while (n--) {
-    //     set_heading(to_rad(90));
-    //     vexDelay(3000);
-    //     set_heading(to_rad(0));
-    //     vexDelay(3000);
-    // }
-    vexDelay(3000);
-    move(10, 0, 0.5, 0.0174532925199);
-    vexDelay(3000);
-    move(40, 30, 2.5, 0.0154532925199);
+    // vexDelay(1000);
+    // move(10, 0);
+    // vexDelay(1000);
+    // move(10, 10);
+    // vexDelay(1000);
+    // move(0, 10);
+    // vexDelay(1000);
+    // move(0, 0);
+    // vexDelay(1000);
+
+    // vexDelay(3000);
+    // move(10, 0, 0.5, 0.0174532925199);
+    // vexDelay(3000);
+    // move(40, 30, 2.5, 0.0154532925199);
     // move(-50, 0);
     tracking.join();
 }
@@ -107,7 +113,7 @@ void set_heading(double heading, double rot_tolerance) {
     PID turn(PID_TURN_PARAMS);
     turn.init(to_rad(rotation()), target_rotation);
     while (fabs(to_rad(rotation()) - target_rotation) > rot_tolerance) {
-        double turn_power = turn.output(to_rad(rotation()));
+        double turn_power = power_processing(turn.output(to_rad(rotation())));
         // double turn_power = 0;
         right.spin(vex::fwd, turn_power, vex::pct);
         left.spin(vex::fwd, -turn_power, vex::pct);
@@ -142,10 +148,11 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
     forward.init(-distance(relative_x, relative_y), 0);
     while (distance(relative_x, relative_y) > dist_tolerance) {
         double fwd_power = forward.output(-distance(relative_x, relative_y));
-        // double turn_power = turn.output(to_rad(rotation()));
-        double turn_power = 0;
-        left.spin(vex::fwd, fwd_power - turn_power, vex::pct);
-        right.spin(vex::fwd, fwd_power + turn_power, vex::pct);
+        double turn_power = turn.output(to_rad(rotation()));
+        // printf("Iteration\nfwd: %.3lf turn: %.3lf\n\n", fwd_power, turn_power);
+        // double turn_power = 0;
+        left.spin(vex::fwd, power_processing(fwd_power - turn_power), vex::pct);
+        right.spin(vex::fwd, power_processing(fwd_power + turn_power), vex::pct);
         relative_x = target_x - x(), relative_y = target_y - y();
         turn.change_target(nearest_coterminal(to_rad(rotation()), get_heading(relative_x, relative_y)));
     }
@@ -158,6 +165,10 @@ int display() {
         brain.Screen.clearScreen();
         brain.Screen.setCursor(1, 1);
         brain.Screen.print("%.2f %.2f %.2f", x(), y(), rotation());
+        controller.Screen.clearScreen();
+        controller.Screen.setCursor(1, 1);
+        controller.Screen.print("%.2f %.2f %.2f", x(), y(), rotation());
+        printf("%.2f %.2f %.2f\n", x(), y(), rotation());
         vex::this_thread::sleep_for(10);
     }
 }
@@ -210,4 +221,14 @@ int track() {
         vex::this_thread::sleep_for(10);
     }
     return 0;
+}
+double power_processing(double power) {
+    // return power;
+    bool neg = (power < 0.0);
+    power = fabs(power);
+    power = std::max(power, 10.0);
+    if (neg) {
+        return -power;
+    }
+    return power;
 }
