@@ -54,7 +54,7 @@ Then $\Delta p = \Delta \theta_{e} \cdot r$.
 
 **Refer to figure 1.**
 
-$\begin{cases} \Delta \theta r_{0} = \Delta L \\ \Delta \theta \left(r_{0}+w\right) = \Delta \theta r_{0} + \Delta \theta w = \Delta \theta R \end{cases}$
+$\begin{cases} \Delta \theta r_{0} = \Delta L \\\ \Delta \theta \left(r_{0}+w\right) = \Delta \theta r_{0} + \Delta \theta w = \Delta \theta R \end{cases}$
 
 $\Rightarrow \Delta \theta w = \Delta R - \Delta L \Rightarrow \Delta \theta = \frac{\Delta R - \Delta L}{w}$
 
@@ -103,19 +103,19 @@ $\Rightarrow \text{m} \angle C_{2}P_{3}P_{2} = \frac{\pi}{2} - \frac{\pi - \Delt
 
 Define offset $k = \theta_{0} + \frac{\Delta \theta}{2}$
 
-Set up a change of basis $A = \begin{bmatrix} \cos{-k} & \cos{\frac{\pi}{2} - k} \\ \sin{-k} & \sin{\frac{\pi}{2} - k} \end{bmatrix} = \begin{bmatrix} \cos{k} & \sin{k} \\ -\sin{k} & \cos{k} \end{bmatrix}$
+Set up a change of basis $A = \begin{bmatrix} \cos{-k} & \cos{\frac{\pi}{2} - k} \\\ \sin{-k} & \sin{\frac{\pi}{2} - k} \end{bmatrix} = \begin{bmatrix} \cos{k} & \sin{k} \\\ -\sin{k} & \cos{k} \end{bmatrix}$
 
 In this system, $C_{1}C_{2}$ lies on the horizontal axis and the change in coordinate is merely the displacement calculated in step 5.
 
 To undo the change of basis to get the translation vector in the global coordinate system, multiply by the inverse matrix:
 
-$A^{-1} = \begin{bmatrix} \cos{k} & -\sin{k} \\ \sin{k} & \cos{k} \end{bmatrix}$
+$A^{-1} = \begin{bmatrix} \cos{k} & -\sin{k} \\\ \sin{k} & \cos{k} \end{bmatrix}$
 
 7. Summary
 
 * $\Delta \theta = \frac{\Delta R - \Delta L}{w}$
-* $d = \begin{cases} 2r\sin{\frac{\Delta \theta}{2}} & \Delta \theta \ne 0 \\ \Delta L & \Delta \theta = 0 \end{cases}$
-* $\vec{t} = d \cdot \begin{bmatrix} \cos{k} & -\sin{k} \\ \sin{k} & \cos{k} \end{bmatrix}$
+* $d = \begin{cases} 2r\sin{\frac{\Delta \theta}{2}} & \Delta \theta \ne 0 \\\ \Delta L & \Delta \theta = 0 \end{cases}$
+* $\vec{t} = d \cdot \begin{bmatrix} \cos{k} & -\sin{k} \\\ \sin{k} & \cos{k} \end{bmatrix}$
 
 Units for odometry and drive are as follows:
 - Rotation: strictly in radians (may consider adding macro `#define deg * π / 180` to enable passing parameters like `180 deg`, becoming $\frac{180\pi}{180} = \pi$ which automatically converts to radians; functions `to_rad` and `to_deg` have been provided if coders do not wish to use macros)
