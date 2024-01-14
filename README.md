@@ -31,15 +31,21 @@ It is shown that the math for a positive (counterclockwise) motion holds for neg
 1. Constructions
 
 **Refer to figure 1.**
+
 $\overline{P_{1}C_{2}P_{6}} \perp \overline{OR_{1}}$
+
 $\overline{P_{1}P_{3}}$ is global east.
+
 $\overline{P_{4}C_{2}P_{7}} \parallel \overline{P_{1}P_{3}}$
+
 $\overline{C_{2}P_{5}} \perp \overline{OC_{2}}$
 
 2. Calculating positional change
 
 **Refer to figure 2.**
+
 Let the wheel radius be $r_{w}$, and $\Delta \theta_{e}$ be the change in encoder position in radians. 
+
 Then $\Delta p = \Delta \theta_{e} \cdot r$.
 
 3. Calculating heading change
@@ -47,21 +53,29 @@ Then $\Delta p = \Delta \theta_{e} \cdot r$.
 * Case 1: Both wheels have the same sign
 
 **Refer to figure 1.**
+
 $\begin{cases} \Delta \theta r_{0} = \Delta L \\ \Delta \theta \left(r_{0}+w\right) = \Delta \theta r_{0} + \Delta \theta w = \Delta \theta R \end{cases}$
+
 $\Rightarrow \Delta \theta w = \Delta R - \Delta L \Rightarrow \Delta \theta = \frac{\Delta R - \Delta L}{w}$
 
 * Case 2: Wheels have the opposite sign
 
 **Refer to figure 3.**
+
 $w = L_{0}R_{0} = OR_{0} - OL_{0} = \frac{\Delta R}{\theta} - \frac{\Delta L}{\theta} = \frac{\Delta R - \Delta L}{\theta} \Rightarrow \Delta \theta = \frac{\Delta R - \Delta L}{w}$
 
 4. Calculating final heading
 
 **Refer to figure 1.**
+
 $\text{m}\angle OC_{2}P_{1} = \frac{\pi}{2} - \Delta \theta$
+
 $\overline{C_{2}P_{4}} \parallel \overline{C_{1}P_{1}} \Rightarrow \text{m}\angle P_{4}C_{2}P_{1} = \theta_{0}$
+
 $\Rightarrow \text{m} \angle OC_{2}P_{4} = \theta_{0} - \left(\frac{\pi}{2} - \Delta \theta \right) = \theta_{0} + \Delta \theta - \frac{\pi}{2}$
+
 $\Rightarrow \text{m} \angle P_{5}C_{2}P_{4} = \frac{\pi}{2} - \left(\theta_{0} + \Delta \theta - \frac{\pi}{2} \right) = \pi - \theta_{0} - \Delta \theta$
+
 $\Rightarrow \text{m} \angle P_{5}C_{2}P_{7} = \pi - \left(\pi - \theta_{0} - \Delta \theta \right) = \theta_{f} = \theta_{0} + \Delta \theta$
 
 5. Calculating straight-line distance
@@ -69,8 +83,11 @@ $\Rightarrow \text{m} \angle P_{5}C_{2}P_{7} = \pi - \left(\pi - \theta_{0} - \D
 * Case 1: nonzero theta
 
 **Refer to figure 1.**
+
 $r=r_{0} + \frac{w}{2} = \frac{\Delta L}{\Delta \theta} + \frac{w}{2} = OC_{1}=OC_{2}$
+
 Construct the perpendicular bisector of $\overline{C_{1}C_{2}}$, $\overline{OF}$
+
 $C_{1}F=C_{2}F=r\sin{\frac{\Delta \theta}{2}} \Rightarrow C_{1}C_{2} = 2r\sin{\frac{\Delta \theta}{2}}$
 
 * Case 2: zero theta
@@ -81,11 +98,17 @@ $C_{1}C_{2} = \Delta L = \Delta R$
 
 **Refer to figure 1.**
 $\triangle OC_{1}C_{2}$ is isosceles $\Rightarrow \text{m}\angle OC_{1}C_{2} = \frac{\pi - \Delta \theta}{2}$
+
 $\Rightarrow \text{m} \angle C_{2}P_{3}P_{2} = \frac{\pi}{2} - \frac{\pi - \Delta \theta}{2} = \frac{\Delta \theta}{2}$
+
 Define offset $k = \theta_{0} + \frac{\Delta \theta}{2}$
+
 Set up a change of basis $A = \begin{bmatrix} \cos{-k} & \cos{\frac{\pi}{2} - k} \\ \sin{-k} & \sin{\frac{\pi}{2} - k} \end{bmatrix} = \begin{bmatrix} \cos{k} & \sin{k} \\ -\sin{k} & \cos{k} \end{bmatrix}$
+
 In this system, $C_{1}C_{2}$ lies on the horizontal axis and the change in coordinate is merely the displacement calculated in step 5.
+
 To undo the change of basis to get the translation vector in the global coordinate system, multiply by the inverse matrix:
+
 $A^{-1} = \begin{bmatrix} \cos{k} & -\sin{k} \\ \sin{k} & \cos{k} \end{bmatrix}$
 
 7. Summary
