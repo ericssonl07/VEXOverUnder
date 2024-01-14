@@ -103,7 +103,8 @@ $\Rightarrow \text{m} \angle C_{2}P_{3}P_{2} = \frac{\pi}{2} - \frac{\pi - \Delt
 
 Define offset $k = \theta_{0} + \frac{\Delta \theta}{2}$
 
-Set up a change of basis: $$A = \begin{bmatrix} \cos{-k} & \cos{\frac{\pi}{2} - k} \\\ \sin{-k} & \sin{\frac{\pi}{2} - k} \end{bmatrix} = \begin{bmatrix} \cos{k} & \sin{k} \\\ -\sin{k} & \cos{k} \end{bmatrix}$$
+Set up a change of basis: 
+$$A = \begin{bmatrix} \cos{-k} & \cos{\frac{\pi}{2} - k} \\\ \sin{-k} & \sin{\frac{\pi}{2} - k} \end{bmatrix} = \begin{bmatrix} \cos{k} & \sin{k} \\\ -\sin{k} & \cos{k} \end{bmatrix}$$
 
 In this system, $C_{1}C_{2}$ lies on the horizontal axis and the change in coordinate is merely the displacement calculated in step 5.
 
