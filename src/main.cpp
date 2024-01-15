@@ -12,10 +12,10 @@ control period: add callback functions for automatic actions
 
 vex::motor left_motor_1(vex::PORT3, vex::gearSetting::ratio6_1, true);
 vex::motor left_motor_2_top(vex::PORT9, vex::gearSetting::ratio6_1, false);
-vex::motor left_motor_2_bottom(vex::PORT2, vex::gearSetting::ratio6_1, true);
+vex::motor left_motor_2_bottom(vex::PORT8, vex::gearSetting::ratio6_1, true);
 
 vex::motor right_motor_1(vex::PORT6, vex::gearSetting::ratio6_1, false);
-vex::motor right_motor_2_top(vex::PORT8, vex::gearSetting::ratio6_1, true);
+vex::motor right_motor_2_top(vex::PORT10, vex::gearSetting::ratio6_1, true);
 vex::motor right_motor_2_bottom(vex::PORT5, vex::gearSetting::ratio6_1, false);
 
 vex::motor_group left(left_motor_2_top, left_motor_2_bottom, left_motor_1);
@@ -48,7 +48,14 @@ int main(int argc, const char * argv[]) {
     // vex::thread control(controlling);
     vex::thread displaying(display);
     // brain.Screen.print("Hi\n");
-
+    move(30, 0);
+    vexDelay(2000);
+    move(30, -30);
+    vexDelay(2000);
+    // move(0, 10);
+    // vexDelay(2000);
+    // move(0, 0);
+    // vexDelay(2000);
     // left.spin(vex::fwd, 10, vex::pct);
     // right.spin(vex::fwd, 10, vex::pct);
     // int n = 5;
@@ -58,7 +65,7 @@ int main(int argc, const char * argv[]) {
     //     set_heading(to_rad(0));
     //     vexDelay(3000);
     // }
-    set_heading(to_rad(90));
+    // set_heading(to_rad(90));
     // vexDelay(3000);
     // move(10, 0, 0.5, 0.0174532925199);
     // vexDelay(3000);
@@ -68,29 +75,13 @@ int main(int argc, const char * argv[]) {
 }
 
 int controlling() {
-    auto toggle_pneumatics = [] () -> void {
-        static bool on = false;
-        if (on) {
-            pneumatics.close();
-            on = false;
-        } else {
-            pneumatics.open();
-            on = true;
-        }
-    };
     while (true) {
         double fwdpower = controller.Axis3.position();
         double turnpower = controller.Axis1.position();
         left.spin(vex::fwd, fwdpower + turnpower, vex::pct);
         right.spin(vex::fwd, fwdpower - turnpower, vex::pct);
-        if (controller.ButtonL1.pressing()) {
-            pneumatics.open();
-        } else {
-            pneumatics.close();
-        }
-        controller.ButtonL1.pressed(toggle_pneumatics);
+        vex::this_thread::sleep_for(1);
     }
-    vex::this_thread::sleep_for(10);
 }
 
 double to_rad(double degree_measure) {
@@ -114,6 +105,7 @@ void set_heading(double heading, double rot_tolerance) {
         // double turn_power = 0;
         right.spin(vex::fwd, turn_power, vex::pct);
         left.spin(vex::fwd, -turn_power, vex::pct);
+        vex::this_thread::sleep_for(1);
     }
     left.stop();
     right.stop();
@@ -151,6 +143,7 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
         right.spin(vex::fwd, fwd_power + turn_power, vex::pct);
         relative_x = target_x - x(), relative_y = target_y - y();
         turn.change_target(nearest_coterminal(to_rad(rotation()), get_heading(relative_x, relative_y)));
+        vex::this_thread::sleep_for(1);
     }
     left.stop();
     right.stop();
@@ -211,7 +204,7 @@ int track() {
         x_position += local_x_translation * cos(local_offset);
         y_position += local_x_translation * sin(local_offset);
         rotation_value += delta_rotation;
-        vex::this_thread::sleep_for(10);
+        vex::this_thread::sleep_for(1);
     }
     return 0;
 }
