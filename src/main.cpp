@@ -26,6 +26,9 @@ vex::controller controller;
 
 vex::pneumatics pneumatics(brain.ThreeWirePort.A);
 
+vex::motor catapult(vex::PORT19, vex::gearSetting::ratio36_1, false);
+vex::motor intake(vex::PORT12, vex::gearSetting::ratio18_1, false);
+
 #define BASE_WIDTH 31.7 // centimeters
 #define WHEEL_RADIUS 4.15 // centimeters
 #define PID_TURN_PARAMS 13.5, 0.01, 0.8, 0.999 // parameter pack (kp, ki, kd, ir)
@@ -48,10 +51,10 @@ int main(int argc, const char * argv[]) {
     // vex::thread control(controlling);
     vex::thread displaying(display);
     // brain.Screen.print("Hi\n");
-    move(30, 0);
-    vexDelay(2000);
-    move(30, -30);
-    vexDelay(2000);
+    move(50, 0);
+    // vexDelay(2000);
+    // move(30, -30);
+    // vexDelay(2000);
     // move(0, 10);
     // vexDelay(2000);
     // move(0, 0);
@@ -80,6 +83,18 @@ int controlling() {
         double turnpower = controller.Axis1.position();
         left.spin(vex::fwd, fwdpower + turnpower, vex::pct);
         right.spin(vex::fwd, fwdpower - turnpower, vex::pct);
+        if (controller.ButtonL1.pressing()) {
+            catapult.spin(vex::fwd, 50, vex::pct);
+        } else {
+            catapult.stop();
+        }
+        if (controller.ButtonR1.pressing()) {
+            intake.spin(vex::fwd, 50, vex::pct);
+        } else if (controller.ButtonR2.pressing()) {
+            intake.spin(vex::fwd, -50, vex::pct);
+        } else {
+            intake.stop();
+        }
         vex::this_thread::sleep_for(1);
     }
 }
