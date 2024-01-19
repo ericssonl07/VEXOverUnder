@@ -4,36 +4,42 @@
 #include <vex.h>
 #include <pid.hpp>
 
-/*
+// DEVICES
 
-control period: add callback functions for automatic actions
+    vex::brain brain;
+    vex::controller controller;
 
-*/
+    vex::pneumatics wings(brain.ThreeWirePort.A);
+    vex::pneumatics lift(brain.ThreeWirePort.B);
+    vex::pneumatics elevation(brain.ThreeWirePort.C);
 
-vex::motor left_motor_1(vex::PORT3, vex::gearSetting::ratio6_1, true);
-vex::motor left_motor_2_top(vex::PORT9, vex::gearSetting::ratio6_1, false);
-vex::motor left_motor_2_bottom(vex::PORT8, vex::gearSetting::ratio6_1, true);
+    vex::motor catapult(vex::PORT19, vex::gearSetting::ratio36_1, false);
+    vex::motor intake(vex::PORT13, vex::gearSetting::ratio6_1, true);
 
-vex::motor right_motor_1(vex::PORT6, vex::gearSetting::ratio6_1, false);
-vex::motor right_motor_2_top(vex::PORT10, vex::gearSetting::ratio6_1, true);
-vex::motor right_motor_2_bottom(vex::PORT5, vex::gearSetting::ratio6_1, false);
+    vex::motor left_motor_1(vex::PORT3, vex::gearSetting::ratio6_1, true);
+    vex::motor left_motor_2_top(vex::PORT9, vex::gearSetting::ratio6_1, false);
+    vex::motor left_motor_2_bottom(vex::PORT8, vex::gearSetting::ratio6_1, true);
 
-vex::motor_group left(left_motor_2_top, left_motor_2_bottom, left_motor_1);
-vex::motor_group right(right_motor_2_top, right_motor_2_bottom, right_motor_1);
+    vex::motor right_motor_1(vex::PORT12, vex::gearSetting::ratio6_1, false);
+    vex::motor right_motor_2_top(vex::PORT10, vex::gearSetting::ratio6_1, true);
+    vex::motor right_motor_2_bottom(vex::PORT5, vex::gearSetting::ratio6_1, false);
 
-vex::brain brain;
-vex::controller controller;
+    vex::motor_group left(left_motor_2_top, left_motor_2_bottom, left_motor_1);
+    vex::motor_group right(right_motor_2_top, right_motor_2_bottom, right_motor_1);
 
-vex::pneumatics pneumatics(brain.ThreeWirePort.A);
+// unit conversions
+const double rad_to_deg = 180 / M_PI;
+const double deg_to_rad = 1 / rad_to_deg;
+#define DEG * deg_to_rad
+#define RAD * rad_to_deg
 
-vex::motor catapult(vex::PORT19, vex::gearSetting::ratio36_1, false);
-vex::motor intake(vex::PORT12, vex::gearSetting::ratio18_1, false);
-
+// drivetrain parameters
 #define BASE_WIDTH 31.7 // centimeters
 #define WHEEL_RADIUS 4.15 // centimeters
-#define PID_TURN_PARAMS 13.5, 0.01, 0.8, 0.999 // parameter pack (kp, ki, kd, ir)
+#define PID_TURN_PARAMS 6.5, 0.01, 0.8, 0.999 // parameter pack (kp, ki, kd, ir)
 #define PID_LINEAR_PARAMS 1.25, 0.0002, 0.05, 0.999 // parameter pack (kp, ki, kd, ir)
 
+// odometry and motion functions
 double x_position, y_position, rotation_value;
 double x() { return x_position; }
 double y() { return y_position; }
@@ -42,89 +48,287 @@ double to_deg(double radian_measure);
 double rotation() { return to_deg(rotation_value); }
 int track();
 void set_heading(double heading, double rot_tolerance = 0.0174532925199);
-void move(double x, double y, double dist_tolerance = 0.5, double rot_tolerance = 0.0174532925199);
+void move(double x, double y, double dist_tolerance = 3, double rot_tolerance = 0.0174532925199);
 int display();
 int controlling();
+void autonomous();
+void init();
+void turn(double angle);
+void fwd(double dist);
 
 int main(int argc, const char * argv[]) {
+    init();
     vex::thread tracking(track);
-    // vex::thread control(controlling);
     vex::thread displaying(display);
-    // brain.Screen.print("Hi\n");
-    move(50, 0);
-    // vexDelay(2000);
-    // move(30, -30);
-    // vexDelay(2000);
-    // move(0, 10);
-    // vexDelay(2000);
-    // move(0, 0);
-    // vexDelay(2000);
-    // left.spin(vex::fwd, 10, vex::pct);
-    // right.spin(vex::fwd, 10, vex::pct);
-    // int n = 5;
-    // while (n--) {
-    //     set_heading(to_rad(90));
-    //     vexDelay(3000);
-    //     set_heading(to_rad(0));
-    //     vexDelay(3000);
-    // }
-    // set_heading(to_rad(90));
-    // vexDelay(3000);
-    // move(10, 0, 0.5, 0.0174532925199);
-    // vexDelay(3000);
-    // move(40, 30, 2.5, 0.0154532925199);
-    // move(-50, 0);
-    tracking.join();
+    autonomous();
+    vex::thread control(controlling);
 }
 
+
+// Turn `angle` radians
+void turn(double angle) {
+    set_heading((rotation() + angle RAD) DEG);
+}
+
+// Move `dist` centimeters forward at current heading
+void fwd(double dist) {
+    double theta = rotation() DEG;
+    move(x() + dist * cos(theta), y() + dist * sin(theta));
+}
+
+/*
+Initialization function for encoders:
+ - left motors set to zero
+ - right motors set to zero
+*/
+void init() {
+    left_motor_1.resetPosition();
+    left_motor_2_top.resetPosition();
+    left_motor_2_bottom.resetPosition();
+    right_motor_1.resetPosition();
+    right_motor_2_top.resetPosition();
+    right_motor_2_bottom.resetPosition();
+}
+
+/*
+Stops devices:
+ - left motor group
+ - right motor group
+ - intake motor
+ - catapult motor
+*/
+void stop() {
+    left.stop();
+    right.stop();
+    intake.stop();
+    catapult.stop();
+}
+
+/*
+Autonomous function
+Note: Currently defined for defense (approach goal from left side)
+
+Steps
+1. Release the intake by engaging the lift (size limit release)
+2. Reverse the intake to output the preload
+3. Move the preload into the goal
+4. Turn around and repeatedly ram the preload into the goal using the back of the robot
+*/
+void autonomous() {
+    // release intake
+    lift.open();
+    vexDelay(500);
+
+    // outtake
+    intake.spin(vex::fwd, 100, vex::pct);
+    vexDelay(2000);
+    // move into goal
+    stop();
+    left.spin(vex::fwd, 100, vex::pct);
+    right.spin(vex::fwd, 100, vex::pct);
+    vexDelay(1500);
+
+    // backup a little bit
+    left.spin(vex::fwd, -50, vex::pct);
+    right.spin(vex::fwd, -50, vex::pct);
+    vexDelay(200);
+    stop();
+
+    // turn around
+    turn(180 DEG);
+
+    // back ram
+    for (int i = 0; i < 2; ++i) {
+        left.spin(vex::fwd, -50, vex::pct);
+        right.spin(vex::fwd, -50, vex::pct);
+        vexDelay(500);
+        stop();
+        vexDelay(500);
+
+        left.spin(vex::fwd, 50, vex::pct);
+        right.spin(vex::fwd, 50, vex::pct);
+        vexDelay(200);
+        stop();
+        vexDelay(500);
+    }
+    return; // timing- 15 seconds forced stop
+
+    // back ram goal align
+    left.spin(vex::fwd, -50, vex::pct);
+    right.spin(vex::fwd, -50, vex::pct);
+    vexDelay(1000);
+    stop();
+    vexDelay(500);
+
+    // border align
+    fwd(20);
+    turn(-90 DEG);
+    left.spin(vex::fwd, -100, vex::pct);
+    right.spin(vex::fwd, -100, vex::pct);
+    vexDelay(500);
+    stop();
+    vexDelay(500);
+
+    // aligning for center ball
+    fwd(90);
+    turn(-30 DEG);
+
+    // defense strategy
+    intake.spin(vex::fwd, 100, vex::pct);
+    left.spin(vex::fwd, 100, vex::pct);
+    right.spin(vex::fwd, 100, vex::pct);
+    vexDelay(3000);
+}
+
+/*
+Power processing function which limits `power` such that it satisfies:
+0.25 ≤ |power| ≤ 20.00
+*/
+double powercap(double power) {
+    bool neg = false;
+    if (power < 0) {
+        neg = true;
+    }
+    power = fabs(power);
+    power = std::max(0.25, power);
+    power = std::min(20.0, power);
+    if (neg) {
+        power = -power;
+    }
+    return power;
+}
+
+/*
+Control period function.
+Controller binds:
+ - Axis 3 -> Forward/Backward power
+ - Axis 1 -> Turning
+ - L1 -> Wings (toggle)
+ - L2 -> Catapult (hold)
+ - R1 -> Intake out (hold)
+ - R2 -> Intake in (hold)
+ - A -> Lift (toggle)
+ - B -> Elevation (toggle)
+*/
 int controlling() {
+    bool lastL1State = 0;
+    bool toggleWings = 0;
+
+    bool lastAState = 0;
+    bool toggleLift = 0;
+
+    bool lastBState = 0;
+    bool toggleElevation = 0;
+
     while (true) {
         double fwdpower = controller.Axis3.position();
-        double turnpower = controller.Axis1.position();
+        double turnpower = controller.Axis1.position() * 0.4;
         left.spin(vex::fwd, fwdpower + turnpower, vex::pct);
         right.spin(vex::fwd, fwdpower - turnpower, vex::pct);
-        if (controller.ButtonL1.pressing()) {
-            catapult.spin(vex::fwd, 50, vex::pct);
-        } else {
-            catapult.stop();
+
+        //toggle wings
+        if(controller.ButtonL1.pressing() != lastL1State && lastL1State != 1){
+            if(toggleWings){
+                toggleWings = 0;
+            } else{
+                toggleWings = 1;
+            }
         }
-        if (controller.ButtonR1.pressing()) {
-            intake.spin(vex::fwd, 50, vex::pct);
-        } else if (controller.ButtonR2.pressing()) {
-            intake.spin(vex::fwd, -50, vex::pct);
+        if (toggleWings) {
+            wings.open();
         } else {
-            intake.stop();
+            wings.close();
         }
-        vex::this_thread::sleep_for(1);
+        lastL1State = controller.ButtonL1.pressing();
+
+        // toggleLift
+        if(controller.ButtonA.pressing() != lastAState && lastAState != 1){
+            if(toggleLift){
+                toggleLift = 0;
+            } else{
+                toggleLift = 1;
+            }
+        }
+        if (toggleLift) {
+            lift.open();
+
+        } else {
+            lift.close();
+        }
+        lastAState = controller.ButtonA.pressing();
+
+        // toggleLift
+        if(controller.ButtonB.pressing() != lastBState && lastBState != 1){
+            if(toggleElevation){
+                toggleElevation = 0;
+            } else{
+                toggleElevation = 1;
+            }
+        }
+        if (toggleElevation) {
+            elevation.open();
+
+        } else {
+            elevation.close();
+        }
+        lastBState = controller.ButtonB.pressing();
+
+        if(controller.ButtonL2.pressing()) {
+            catapult.spin(vex::fwd, 100, vex::pct);
+        }
+        else {
+            catapult.spin(vex::fwd, 0, vex::pct);
+        }
+
+        // intake
+        if(controller.ButtonR2.pressing()) {
+            intake.spin(vex::fwd, -100, vex::pct);
+        }
+
+        if(controller.ButtonR1.pressing()) {
+            intake.spin(vex::fwd, 100, vex::pct);
+        }
+ 
+        if(!controller.ButtonR2.pressing() && !controller.ButtonR1.pressing()) {
+            intake.spin(vex::fwd, 0, vex::pct);
+        }
+        
+        vex::this_thread::sleep_for(10);
     }
+    return 0;
 }
 
+// Convert a degree measure to radians
 double to_rad(double degree_measure) {
     static const constexpr double conversion = 3.14159265358979323846 / 180.0;
     return degree_measure * conversion;
 }
+// Convert a radian measure to degrees
 double to_deg(double radian_measure) {
     static const constexpr double conversion = 180.0 / 3.14159265358979323846;
     return radian_measure * conversion;
 }
+// Set the heading to a specified value (accounts for coterminality)
 void set_heading(double heading, double rot_tolerance) {
+    printf("Set heading\n");
     auto nearest_coterminal = [] (double rotation, double heading) -> double {
         static double pi2 = M_PI * 2, divpi2 = 1 / pi2;
         return floor((rotation - heading + M_PI) * divpi2) * pi2 + heading;
     };
-    double target_rotation = nearest_coterminal(to_rad(rotation()), heading);
+    double target_rotation = nearest_coterminal(rotation() DEG, heading);
     PID turn(PID_TURN_PARAMS);
-    turn.init(to_rad(rotation()), target_rotation);
-    while (fabs(to_rad(rotation()) - target_rotation) > rot_tolerance) {
-        double turn_power = turn.output(to_rad(rotation()));
-        // double turn_power = 0;
+    turn.init(rotation() DEG, target_rotation);
+    while (fabs(rotation() DEG - target_rotation) > rot_tolerance) {
+        double turn_power = powercap(turn.output(rotation() DEG));
         right.spin(vex::fwd, turn_power, vex::pct);
         left.spin(vex::fwd, -turn_power, vex::pct);
         vex::this_thread::sleep_for(1);
     }
     left.stop();
     right.stop();
+    vexDelay(1000);
 }
+// Move the robot to (`target_x`, `target_y`) in Cartesian coordinates
 void move(double target_x, double target_y, double dist_tolerance, double rot_tolerance) {
     auto distance = [] (double x, double y) -> double {
         return pow(x * x + y * y, 0.5);
@@ -144,16 +348,15 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
         }
     };
     double relative_x = target_x - x(), relative_y = target_y - y();
-    double target_rotation = nearest_coterminal(to_rad(rotation()), get_heading(relative_x, relative_y));
+    double target_rotation = nearest_coterminal(rotation() DEG, get_heading(relative_x, relative_y));
     set_heading(get_heading(relative_x, relative_y), rot_tolerance);
     vexDelay(1000);
     PID turn(PID_TURN_PARAMS), forward(PID_LINEAR_PARAMS);
     turn.init(get_heading(relative_x, relative_y), target_rotation);
     forward.init(-distance(relative_x, relative_y), 0);
     while (distance(relative_x, relative_y) > dist_tolerance) {
-        double fwd_power = forward.output(-distance(relative_x, relative_y));
-        // double turn_power = turn.output(to_rad(rotation()));
-        double turn_power = 0;
+        double fwd_power = powercap(forward.output(-distance(relative_x, relative_y)));
+        double turn_power = powercap(turn.output(to_rad(rotation())) * 0.05);
         left.spin(vex::fwd, fwd_power - turn_power, vex::pct);
         right.spin(vex::fwd, fwd_power + turn_power, vex::pct);
         relative_x = target_x - x(), relative_y = target_y - y();
@@ -162,19 +365,49 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
     }
     left.stop();
     right.stop();
+    vexDelay(1000);
 }
 
+// Display debug information
 int display() {
     while (true) {
         brain.Screen.clearScreen();
         brain.Screen.setCursor(1, 1);
         brain.Screen.print("%.2f %.2f %.2f", x(), y(), rotation());
+        controller.Screen.clearScreen();
+        controller.Screen.setCursor(1, 1);
+        controller.Screen.print("%.2f %.2f %.2f", x(), y(), rotation());
         printf("%.2f %.2f %.2f\n", x(), y(), rotation());
-        vex::this_thread::sleep_for(10);
+
+        brain.Screen.setCursor(2, 1);
+        brain.Screen.print(
+            "Left: %.2f %.2f %.2f", 
+            left_motor_1.position(vex::deg),
+            left_motor_2_bottom.position(vex::deg),
+            left_motor_2_top.position(vex::deg)
+        );
+        brain.Screen.setCursor(3, 1);
+        brain.Screen.print(
+            "Right: %.2f %.2f %.2f",
+            right_motor_1.position(vex::deg),
+            right_motor_2_bottom.position(vex::deg),
+            right_motor_2_top.position(vex::deg)
+        );
+
+        printf("Left: %.2f %.2f %.2f\n", 
+            left_motor_1.position(vex::deg),
+            left_motor_2_bottom.position(vex::deg),
+            left_motor_2_top.position(vex::deg));
+        printf("Right: %.2f %.2f %.2f\n\n",
+            right_motor_1.position(vex::deg),
+            right_motor_2_bottom.position(vex::deg),
+            right_motor_2_top.position(vex::deg));
+
+        vex::this_thread::sleep_for(100);
     }
 }
 
-
+// Odometry tracking function (runs in a background thread)
 int track() {
     static const constexpr double base_width = BASE_WIDTH;
     static const constexpr double wheel_radius = WHEEL_RADIUS;
