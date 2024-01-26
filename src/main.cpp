@@ -52,6 +52,7 @@ int controlling();
 void init();
 void turn(double angle);
 void fwd(double dist);
+void bwd(double dist);
 double powercap(double power);
 
 int main(int argc, const char * argv[]) {
@@ -59,7 +60,8 @@ int main(int argc, const char * argv[]) {
     vex::thread tracking(track);
     vex::thread displaying(display);
     vex::thread control(controlling);
-    move(-10, 0);
+    turn(45 DEG);
+    bwd(10);
 }
 
 // Set the heading to a specified value (accounts for coterminality)
@@ -68,11 +70,11 @@ void set_heading(double heading, double rot_tolerance) {
         static double pi2 = M_PI * 2, divpi2 = 1 / pi2;
         return floor((rotation - heading + M_PI) * divpi2) * pi2 + heading;
     };
-    double target_rotation = nearest_coterminal(rotation() DEG, heading);
+    double target_rotation = nearest_coterminal(rotation(), heading);
     PID turn(PID_TURN_PARAMS);
-    turn.init(rotation() DEG, target_rotation);
-    while (fabs(rotation() DEG - target_rotation) > rot_tolerance) {
-        double turn_power = powercap(turn.output(rotation() DEG));
+    turn.init(rotation(), target_rotation);
+    while (fabs(rotation() - target_rotation) > rot_tolerance) {
+        double turn_power = powercap(turn.output(rotation()));
         right.spin(vex::fwd, turn_power, vex::pct);
         left.spin(vex::fwd, -turn_power, vex::pct);
         vex::this_thread::sleep_for(1);
@@ -105,7 +107,7 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
     };
     double relative_x = target_x - x(), relative_y = target_y - y();
     double target_rotation = nearest_coterminal(rotation(), get_heading(relative_x, relative_y));
-    if (fabs(target_rotation - rotation()) <= 90.0 DEG) {
+    if (fabs(target_rotation - rotation()) <= M_PI_2) {
         set_heading(target_rotation, rot_tolerance);
         PID turn(PID_TURN_PARAMS), forward(PID_LINEAR_PARAMS);
         turn.init(rotation(), target_rotation);
@@ -142,12 +144,18 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
 
 // Turn `angle` radians
 void turn(double angle) {
-    set_heading((rotation() + angle RAD) DEG);
+    set_heading(rotation() + angle);
 }
 
 // Move `dist` centimeters forward at current heading
 void fwd(double dist) {
-    double theta = rotation() DEG;
+    double theta = rotation();
+    move(x() + dist * cos(theta), y() + dist * sin(theta));
+}
+
+// Move `dist` centimeters backward at current heading
+void bwd(double dist) {
+    double theta = rotation() + M_PI;
     move(x() + dist * cos(theta), y() + dist * sin(theta));
 }
 
