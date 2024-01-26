@@ -9,9 +9,10 @@
     vex::brain brain;
     vex::controller controller;
 
-    vex::pneumatics wings(brain.ThreeWirePort.A);
+    vex::pneumatics front_wings(brain.ThreeWirePort.A);
     vex::pneumatics lift(brain.ThreeWirePort.B);
-    vex::pneumatics elevation(brain.ThreeWirePort.C);
+    vex::pneumatics back_wings(brain.ThreeWirePort.C);
+    vex::pneumatics elevation(brain.ThreeWirePort.D);
 
     vex::motor catapult(vex::PORT19, vex::gearSetting::ratio36_1, false);
     vex::motor intake(vex::PORT13, vex::gearSetting::ratio6_1, true);
@@ -54,14 +55,22 @@ void turn(double angle);
 void fwd(double dist);
 void bwd(double dist);
 double powercap(double power);
+void autonomous();
 
 int main(int argc, const char * argv[]) {
     init();
     vex::thread tracking(track);
     vex::thread displaying(display);
+    autonomous();
     vex::thread control(controlling);
-    turn(45 DEG);
-    bwd(10);
+}
+
+void autonomous() {
+    front_wings.open();
+    vexDelay(200);
+    left.spin(vex::fwd, 100, vex::pct);
+    right.spin(vex::fwd, 80, vex::pct);
+    vexDelay(1000);
 }
 
 // Set the heading to a specified value (accounts for coterminality)
@@ -93,6 +102,13 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
         return floor((rotation - heading + M_PI) * divpi2) * pi2 + heading;
     };
     auto get_heading = [] (double x, double y) -> double {
+        if (x == 0) {
+            if (y < 0) {
+                return -M_PI_2;
+            } else {
+                return M_PI_2;
+            }
+        }
         double heading = atan(y / x);
         if (y == 0 and x < 0) {
             return M_PI;
@@ -107,6 +123,7 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
     };
     double relative_x = target_x - x(), relative_y = target_y - y();
     double target_rotation = nearest_coterminal(rotation(), get_heading(relative_x, relative_y));
+    double adjustment_dampening = 0.05;
     if (fabs(target_rotation - rotation()) <= M_PI_2) {
         set_heading(target_rotation, rot_tolerance);
         PID turn(PID_TURN_PARAMS), forward(PID_LINEAR_PARAMS);
@@ -114,12 +131,12 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
         forward.init(-distance(relative_x, relative_y), 0);
         while (distance(relative_x, relative_y) > dist_tolerance) {
             double fwd_power = powercap(forward.output(-distance(relative_x, relative_y)));
-            double turn_power = powercap(turn.output(rotation()) * 0.05);
+            double turn_power = turn.output(rotation()) * adjustment_dampening;
             left.spin(vex::fwd, fwd_power - turn_power, vex::pct);
             right.spin(vex::fwd, fwd_power + turn_power, vex::pct);
             relative_x = target_x - x(), relative_y = target_y - y();
             turn.change_target(nearest_coterminal(rotation(), get_heading(relative_x, relative_y)));
-            vex::this_thread::sleep_for(1);
+            vex::this_thread::sleep_for(10);
         }
     } else {
         set_heading(target_rotation + M_PI, rot_tolerance);
@@ -128,12 +145,12 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
         backward.init(distance(relative_x, relative_y), 0);
         while (distance(relative_x, relative_y) > dist_tolerance) {
             double bwd_power = powercap(backward.output(distance(relative_x, relative_y)));
-            double turn_power = powercap(turn.output(rotation()) * 0.05);
+            double turn_power = turn.output(rotation()) * adjustment_dampening;
             left.spin(vex::fwd, bwd_power - turn_power, vex::pct);
             right.spin(vex::fwd, bwd_power + turn_power, vex::pct);
             relative_x = target_x - x(), relative_y = target_y - y();
             turn.change_target(nearest_coterminal(rotation(), get_heading(relative_x, relative_y) + M_PI));
-            vex::this_thread::sleep_for(1);
+            vex::this_thread::sleep_for(10);
         }
     }
     left.stop();
@@ -198,7 +215,7 @@ double powercap(double power) {
     }
     power = fabs(power);
     power = std::max(0.25, power);
-    power = std::min(20.0, power);
+    power = std::min(10.0, power);
     if (neg) {
         power = -power;
     }
@@ -242,9 +259,9 @@ int controlling() {
             }
         }
         if (toggleWings) {
-            wings.open();
+            front_wings.open();
         } else {
-            wings.close();
+            front_wings.close();
         }
         lastL1State = controller.ButtonL1.pressing();
 
