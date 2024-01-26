@@ -16,16 +16,16 @@
     vex::motor catapult(vex::PORT19, vex::gearSetting::ratio36_1, false);
     vex::motor intake(vex::PORT13, vex::gearSetting::ratio6_1, true);
 
-    vex::motor left_motor_1(vex::PORT3, vex::gearSetting::ratio6_1, true);
-    vex::motor left_motor_2_top(vex::PORT9, vex::gearSetting::ratio6_1, false);
-    vex::motor left_motor_2_bottom(vex::PORT8, vex::gearSetting::ratio6_1, true);
+    vex::motor left_motor_1(vex::PORT3, vex::gearSetting::ratio6_1, false);
+    vex::motor left_motor_2(vex::PORT9, vex::gearSetting::ratio6_1, false);
+    vex::motor left_motor_3(vex::PORT8, vex::gearSetting::ratio6_1, false);
 
-    vex::motor right_motor_1(vex::PORT12, vex::gearSetting::ratio6_1, false);
-    vex::motor right_motor_2_top(vex::PORT10, vex::gearSetting::ratio6_1, true);
-    vex::motor right_motor_2_bottom(vex::PORT5, vex::gearSetting::ratio6_1, false);
+    vex::motor right_motor_1(vex::PORT12, vex::gearSetting::ratio6_1, true);
+    vex::motor right_motor_2(vex::PORT10, vex::gearSetting::ratio6_1, true);
+    vex::motor right_motor_3(vex::PORT5, vex::gearSetting::ratio6_1, true);
 
-    vex::motor_group left(left_motor_2_top, left_motor_2_bottom, left_motor_1);
-    vex::motor_group right(right_motor_2_top, right_motor_2_bottom, right_motor_1);
+    vex::motor_group left(left_motor_1, left_motor_2, left_motor_3);
+    vex::motor_group right(right_motor_1, right_motor_2, right_motor_3);
 
 // unit conversions
 const double rad_to_deg = 180 / M_PI;
@@ -43,15 +43,12 @@ const double deg_to_rad = 1 / rad_to_deg;
 double x_position, y_position, rotation_value;
 double x() { return x_position; }
 double y() { return y_position; }
-double to_rad(double degree_measure);
-double to_deg(double radian_measure);
-double rotation() { return to_deg(rotation_value); }
+double rotation() { return rotation_value; }
 int track();
 void set_heading(double heading, double rot_tolerance = 0.0174532925199);
 void move(double x, double y, double dist_tolerance = 3, double rot_tolerance = 0.0174532925199);
 int display();
 int controlling();
-void autonomous();
 void init();
 void turn(double angle);
 void fwd(double dist);
@@ -60,8 +57,81 @@ int main(int argc, const char * argv[]) {
     init();
     vex::thread tracking(track);
     vex::thread displaying(display);
-    autonomous();
     vex::thread control(controlling);
+}
+
+// Set the heading to a specified value (accounts for coterminality)
+void set_heading(double heading, double rot_tolerance) {
+    auto nearest_coterminal = [] (double rotation, double heading) -> double {
+        static double pi2 = M_PI * 2, divpi2 = 1 / pi2;
+        return floor((rotation - heading + M_PI) * divpi2) * pi2 + heading;
+    };
+    double target_rotation = nearest_coterminal(rotation() DEG, heading);
+    PID turn(PID_TURN_PARAMS);
+    turn.init(rotation() DEG, target_rotation);
+    while (fabs(rotation() DEG - target_rotation) > rot_tolerance) {
+        double turn_power = powercap(turn.output(rotation() DEG));
+        right.spin(vex::fwd, turn_power, vex::pct);
+        left.spin(vex::fwd, -turn_power, vex::pct);
+        vex::this_thread::sleep_for(1);
+    }
+    left.stop();
+    right.stop();
+    vexDelay(100);
+}
+// Move the robot to (`target_x`, `target_y`) in Cartesian coordinates
+void move(double target_x, double target_y, double dist_tolerance, double rot_tolerance) {
+    auto distance = [] (double x, double y) -> double {
+        return pow(x * x + y * y, 0.5);
+    };
+    auto nearest_coterminal = [] (double rotation, double heading) -> double {
+        static double pi2 = M_PI * 2, divpi2 = 1 / pi2;
+        return floor((rotation - heading + M_PI) * divpi2) * pi2 + heading;
+    };
+    auto get_heading = [] (double x, double y) -> double {
+        double heading = atan(y / x);
+        if ((x < 0 and y > 0) or (x < 0 and y < 0)) {
+            return heading + M_PI;
+        } else if (x > 0 and y < 0) {
+            return heading + M_PI_2;
+        } else {
+            return heading;
+        }
+    };
+    double relative_x = target_x - x(), relative_y = target_y - y();
+    double target_rotation = nearest_coterminal(rotation(), get_heading(relative_x, relative_y));
+    if (fabs(target_rotation - rotation()) <= 90.0 DEG) {
+        set_heading(target_rotation, rot_tolerance);
+        PID turn(PID_TURN_PARAMS), forward(PID_LINEAR_PARAMS);
+        turn.init(rotation(), target_rotation);
+        forward.init(-distance(relative_x, relative_y), 0);
+        while (distance(relative_x, relative_y) > dist_tolerance) {
+            double fwd_power = powercap(forward.output(-distance(relative_x, relative_y)));
+            double turn_power = powercap(turn.output(rotation()) * 0.05);
+            left.spin(vex::fwd, fwd_power - turn_power, vex::pct);
+            right.spin(vex::fwd, fwd_power + turn_power, vex::pct);
+            relative_x = target_x - x(), relative_y = target_y - y();
+            turn.change_target(nearest_coterminal(rotation(), get_heading(relative_x, relative_y)));
+            vex::this_thread::sleep_for(1);
+        }
+    } else {
+        set_heading(target_rotation + 180.0 DEG, rot_tolerance);
+        PID turn(PID_TURN_PARAMS), backward(PID_LINEAR_PARAMS);
+        turn.init(rotation(), target_rotation + 180.0 DEG);
+        backward.init(distance(relative_x, relative_y), 0);
+        while (distance(relative_x, relative_y) > dist_tolerance) {
+            double bwd_power = powercap(backward.output(distance(relative_x, relative_y)));
+            double turn_power = powercap(turn.output(nearest_coterminal(rotation(), get_heading(relative_x, relative_y) + 180.0 DEG)) * 0.05);
+            left.spin(vex::fwd, bwd_power + turn_power, vex::pct);
+            right.spin(vex::fwd, bwd_power - turn_power, vex::pct);
+            relative_x = target_x - x(), relative_y = target_y - y();
+            turn.change_target(nearest_coterminal(rotation(), get_heading(relative_x, relative_y) + 180.0 DEG));
+            vex::this_thread::sleep_for(1);
+        }
+    }
+    left.stop();
+    right.stop();
+    vexDelay(100);
 }
 
 
@@ -83,11 +153,11 @@ Initialization function for encoders:
 */
 void init() {
     left_motor_1.resetPosition();
-    left_motor_2_top.resetPosition();
-    left_motor_2_bottom.resetPosition();
+    left_motor_2.resetPosition();
+    left_motor_3.resetPosition();
     right_motor_1.resetPosition();
-    right_motor_2_top.resetPosition();
-    right_motor_2_bottom.resetPosition();
+    right_motor_2.resetPosition();
+    right_motor_3.resetPosition();
 }
 
 /*
@@ -102,82 +172,6 @@ void stop() {
     right.stop();
     intake.stop();
     catapult.stop();
-}
-
-/*
-Autonomous function
-Note: Currently defined for defense (approach goal from left side)
-
-Steps
-1. Release the intake by engaging the lift (size limit release)
-2. Reverse the intake to output the preload
-3. Move the preload into the goal
-4. Turn around and repeatedly ram the preload into the goal using the back of the robot
-*/
-void autonomous() {
-    // release intake
-    lift.open();
-    vexDelay(500);
-
-    // outtake
-    intake.spin(vex::fwd, 100, vex::pct);
-    vexDelay(2000);
-    // move into goal
-    stop();
-    left.spin(vex::fwd, 100, vex::pct);
-    right.spin(vex::fwd, 100, vex::pct);
-    vexDelay(1500);
-
-    // backup a little bit
-    left.spin(vex::fwd, -50, vex::pct);
-    right.spin(vex::fwd, -50, vex::pct);
-    vexDelay(200);
-    stop();
-
-    // turn around
-    turn(180 DEG);
-
-    // back ram
-    for (int i = 0; i < 2; ++i) {
-        left.spin(vex::fwd, -50, vex::pct);
-        right.spin(vex::fwd, -50, vex::pct);
-        vexDelay(500);
-        stop();
-        vexDelay(500);
-
-        left.spin(vex::fwd, 50, vex::pct);
-        right.spin(vex::fwd, 50, vex::pct);
-        vexDelay(200);
-        stop();
-        vexDelay(500);
-    }
-    return; // timing- 15 seconds forced stop
-
-    // back ram goal align
-    left.spin(vex::fwd, -50, vex::pct);
-    right.spin(vex::fwd, -50, vex::pct);
-    vexDelay(1000);
-    stop();
-    vexDelay(500);
-
-    // border align
-    fwd(20);
-    turn(-90 DEG);
-    left.spin(vex::fwd, -100, vex::pct);
-    right.spin(vex::fwd, -100, vex::pct);
-    vexDelay(500);
-    stop();
-    vexDelay(500);
-
-    // aligning for center ball
-    fwd(90);
-    turn(-30 DEG);
-
-    // defense strategy
-    intake.spin(vex::fwd, 100, vex::pct);
-    left.spin(vex::fwd, 100, vex::pct);
-    right.spin(vex::fwd, 100, vex::pct);
-    vexDelay(3000);
 }
 
 /*
@@ -298,76 +292,6 @@ int controlling() {
     return 0;
 }
 
-// Convert a degree measure to radians
-double to_rad(double degree_measure) {
-    static const constexpr double conversion = 3.14159265358979323846 / 180.0;
-    return degree_measure * conversion;
-}
-// Convert a radian measure to degrees
-double to_deg(double radian_measure) {
-    static const constexpr double conversion = 180.0 / 3.14159265358979323846;
-    return radian_measure * conversion;
-}
-// Set the heading to a specified value (accounts for coterminality)
-void set_heading(double heading, double rot_tolerance) {
-    printf("Set heading\n");
-    auto nearest_coterminal = [] (double rotation, double heading) -> double {
-        static double pi2 = M_PI * 2, divpi2 = 1 / pi2;
-        return floor((rotation - heading + M_PI) * divpi2) * pi2 + heading;
-    };
-    double target_rotation = nearest_coterminal(rotation() DEG, heading);
-    PID turn(PID_TURN_PARAMS);
-    turn.init(rotation() DEG, target_rotation);
-    while (fabs(rotation() DEG - target_rotation) > rot_tolerance) {
-        double turn_power = powercap(turn.output(rotation() DEG));
-        right.spin(vex::fwd, turn_power, vex::pct);
-        left.spin(vex::fwd, -turn_power, vex::pct);
-        vex::this_thread::sleep_for(1);
-    }
-    left.stop();
-    right.stop();
-    vexDelay(1000);
-}
-// Move the robot to (`target_x`, `target_y`) in Cartesian coordinates
-void move(double target_x, double target_y, double dist_tolerance, double rot_tolerance) {
-    auto distance = [] (double x, double y) -> double {
-        return pow(x * x + y * y, 0.5);
-    };
-    auto nearest_coterminal = [] (double rotation, double heading) -> double {
-        static double pi2 = M_PI * 2, divpi2 = 1 / pi2;
-        return floor((rotation - heading + M_PI) * divpi2) * pi2 + heading;
-    };
-    auto get_heading = [] (double x, double y) -> double {
-        double heading = atan(y / x);
-        if ((x < 0 and y > 0) or (x < 0 and y < 0)) {
-            return heading + M_PI;
-        } else if (x > 0 and y < 0) {
-            return heading + M_PI_2;
-        } else {
-            return heading;
-        }
-    };
-    double relative_x = target_x - x(), relative_y = target_y - y();
-    double target_rotation = nearest_coterminal(rotation() DEG, get_heading(relative_x, relative_y));
-    set_heading(get_heading(relative_x, relative_y), rot_tolerance);
-    vexDelay(1000);
-    PID turn(PID_TURN_PARAMS), forward(PID_LINEAR_PARAMS);
-    turn.init(get_heading(relative_x, relative_y), target_rotation);
-    forward.init(-distance(relative_x, relative_y), 0);
-    while (distance(relative_x, relative_y) > dist_tolerance) {
-        double fwd_power = powercap(forward.output(-distance(relative_x, relative_y)));
-        double turn_power = powercap(turn.output(to_rad(rotation())) * 0.05);
-        left.spin(vex::fwd, fwd_power - turn_power, vex::pct);
-        right.spin(vex::fwd, fwd_power + turn_power, vex::pct);
-        relative_x = target_x - x(), relative_y = target_y - y();
-        turn.change_target(nearest_coterminal(to_rad(rotation()), get_heading(relative_x, relative_y)));
-        vex::this_thread::sleep_for(1);
-    }
-    left.stop();
-    right.stop();
-    vexDelay(1000);
-}
-
 // Display debug information
 int display() {
     while (true) {
@@ -383,25 +307,25 @@ int display() {
         brain.Screen.print(
             "Left: %.2f %.2f %.2f", 
             left_motor_1.position(vex::deg),
-            left_motor_2_bottom.position(vex::deg),
-            left_motor_2_top.position(vex::deg)
+            left_motor_2.position(vex::deg),
+            left_motor_3.position(vex::deg)
         );
         brain.Screen.setCursor(3, 1);
         brain.Screen.print(
             "Right: %.2f %.2f %.2f",
             right_motor_1.position(vex::deg),
-            right_motor_2_bottom.position(vex::deg),
-            right_motor_2_top.position(vex::deg)
+            right_motor_2.position(vex::deg),
+            right_motor_3.position(vex::deg)
         );
 
         printf("Left: %.2f %.2f %.2f\n", 
             left_motor_1.position(vex::deg),
-            left_motor_2_bottom.position(vex::deg),
-            left_motor_2_top.position(vex::deg));
+            left_motor_2.position(vex::deg),
+            left_motor_3.position(vex::deg));
         printf("Right: %.2f %.2f %.2f\n\n",
             right_motor_1.position(vex::deg),
-            right_motor_2_bottom.position(vex::deg),
-            right_motor_2_top.position(vex::deg));
+            right_motor_2.position(vex::deg),
+            right_motor_3.position(vex::deg));
 
         vex::this_thread::sleep_for(100);
     }
@@ -419,12 +343,12 @@ int track() {
     double center_radius, local_x_translation, local_offset;
     auto get_left = [] () -> double {
         return (
-            (left_motor_2_bottom.position(vex::deg) + left_motor_1.position(vex::deg)) * 0.5 * degree_radian * wheel_radius + 1.84
+            (left_motor_3.position(vex::deg) + left_motor_2.position(vex::deg) + left_motor_1.position(vex::deg)) * 0.3333333333 * degree_radian * wheel_radius + 1.84
         ) / 1.68;
     }; // cursed correction factors
     auto get_right = [] () -> double {
         return (
-            (right_motor_2_bottom.position(vex::deg) + right_motor_1.position(vex::deg)) * 0.5 * degree_radian * wheel_radius + 1.84
+            (right_motor_3.position(vex::deg) + right_motor_2.position(vex::deg) + right_motor_1.position(vex::deg)) * 0.3333333333 * degree_radian * wheel_radius + 1.84
         ) / 1.68;
     }; // cursed correction factors
     // auto get_left = [] () -> double { return ((left_motor_2_bottom.position(vex::deg) + left_motor_1.position(vex::deg)) * 0.5 * degree_radian * wheel_radius); }; // cursed correction factors
