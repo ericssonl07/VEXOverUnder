@@ -20,7 +20,7 @@
     vex::motor left_motor_2(vex::PORT9, vex::gearSetting::ratio6_1, false);
     vex::motor left_motor_3(vex::PORT8, vex::gearSetting::ratio6_1, false);
 
-    vex::motor right_motor_1(vex::PORT12, vex::gearSetting::ratio6_1, true);
+    vex::motor right_motor_1(vex::PORT11, vex::gearSetting::ratio6_1, true);
     vex::motor right_motor_2(vex::PORT10, vex::gearSetting::ratio6_1, true);
     vex::motor right_motor_3(vex::PORT5, vex::gearSetting::ratio6_1, true);
 
@@ -52,6 +52,7 @@ int controlling();
 void init();
 void turn(double angle);
 void fwd(double dist);
+double powercap(double power);
 
 int main(int argc, const char * argv[]) {
     init();
@@ -115,17 +116,17 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
             vex::this_thread::sleep_for(1);
         }
     } else {
-        set_heading(target_rotation + 180.0 DEG, rot_tolerance);
+        set_heading(target_rotation + M_PI, rot_tolerance);
         PID turn(PID_TURN_PARAMS), backward(PID_LINEAR_PARAMS);
-        turn.init(rotation(), target_rotation + 180.0 DEG);
+        turn.init(rotation(), target_rotation + M_PI);
         backward.init(distance(relative_x, relative_y), 0);
         while (distance(relative_x, relative_y) > dist_tolerance) {
             double bwd_power = powercap(backward.output(distance(relative_x, relative_y)));
-            double turn_power = powercap(turn.output(nearest_coterminal(rotation(), get_heading(relative_x, relative_y) + 180.0 DEG)) * 0.05);
+            double turn_power = powercap(turn.output(rotation()) * 0.05);
             left.spin(vex::fwd, bwd_power + turn_power, vex::pct);
             right.spin(vex::fwd, bwd_power - turn_power, vex::pct);
             relative_x = target_x - x(), relative_y = target_y - y();
-            turn.change_target(nearest_coterminal(rotation(), get_heading(relative_x, relative_y) + 180.0 DEG));
+            turn.change_target(nearest_coterminal(rotation(), get_heading(relative_x, relative_y) + M_PI));
             vex::this_thread::sleep_for(1);
         }
     }
