@@ -59,6 +59,7 @@ int main(int argc, const char * argv[]) {
     vex::thread tracking(track);
     vex::thread displaying(display);
     vex::thread control(controlling);
+    move(-10, 0);
 }
 
 // Set the heading to a specified value (accounts for coterminality)
@@ -91,6 +92,9 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
     };
     auto get_heading = [] (double x, double y) -> double {
         double heading = atan(y / x);
+        if (y == 0 and x < 0) {
+            return M_PI;
+        }
         if ((x < 0 and y > 0) or (x < 0 and y < 0)) {
             return heading + M_PI;
         } else if (x > 0 and y < 0) {
@@ -123,8 +127,8 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
         while (distance(relative_x, relative_y) > dist_tolerance) {
             double bwd_power = powercap(backward.output(distance(relative_x, relative_y)));
             double turn_power = powercap(turn.output(rotation()) * 0.05);
-            left.spin(vex::fwd, bwd_power + turn_power, vex::pct);
-            right.spin(vex::fwd, bwd_power - turn_power, vex::pct);
+            left.spin(vex::fwd, bwd_power - turn_power, vex::pct);
+            right.spin(vex::fwd, bwd_power + turn_power, vex::pct);
             relative_x = target_x - x(), relative_y = target_y - y();
             turn.change_target(nearest_coterminal(rotation(), get_heading(relative_x, relative_y) + M_PI));
             vex::this_thread::sleep_for(1);
