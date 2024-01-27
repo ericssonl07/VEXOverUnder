@@ -17,16 +17,16 @@
     vex::motor catapult(vex::PORT19, vex::gearSetting::ratio36_1, false);
     vex::motor intake(vex::PORT13, vex::gearSetting::ratio6_1, true);
 
-    vex::motor left_motor_1(vex::PORT3, vex::gearSetting::ratio6_1, false);
-    vex::motor left_motor_2(vex::PORT9, vex::gearSetting::ratio6_1, false);
-    vex::motor left_motor_3(vex::PORT8, vex::gearSetting::ratio6_1, false);
+    vex::motor right_motor_1(vex::PORT3, vex::gearSetting::ratio6_1, false);
+    vex::motor right_motor_2(vex::PORT9, vex::gearSetting::ratio6_1, false);
+    vex::motor right_motor_3(vex::PORT8, vex::gearSetting::ratio6_1, false);
 
-    vex::motor right_motor_1(vex::PORT11, vex::gearSetting::ratio6_1, true);
-    vex::motor right_motor_2(vex::PORT10, vex::gearSetting::ratio6_1, true);
-    vex::motor right_motor_3(vex::PORT5, vex::gearSetting::ratio6_1, true);
+    vex::motor left_motor_1(vex::PORT11, vex::gearSetting::ratio6_1, true);
+    vex::motor left_motor_2(vex::PORT10, vex::gearSetting::ratio6_1, true);
+    vex::motor left_motor_3(vex::PORT5, vex::gearSetting::ratio6_1, true);
 
-    vex::motor_group left(left_motor_1, left_motor_2, left_motor_3);
     vex::motor_group right(right_motor_1, right_motor_2, right_motor_3);
+    vex::motor_group left(left_motor_1, left_motor_2, left_motor_3);
 
 // unit conversions
 const double rad_to_deg = 180 / M_PI;
@@ -61,7 +61,9 @@ int main(int argc, const char * argv[]) {
     init();
     vex::thread tracking(track);
     vex::thread displaying(display);
-    autonomous();
+    // bwd(100);
+    turn(90 DEG);
+    // autonomous();
     vex::thread control(controlling);
 }
 
@@ -121,9 +123,12 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
             return heading;
         }
     };
+    auto sigmoid = [] (double x) -> double {
+        return 1 / (1 + pow(M_E, -5 * (x - 2)));
+    };
     double relative_x = target_x - x(), relative_y = target_y - y();
     double target_rotation = nearest_coterminal(rotation(), get_heading(relative_x, relative_y));
-    double adjustment_dampening = 0.05;
+    double adjustment_dampening = 1;
     if (fabs(target_rotation - rotation()) <= M_PI_2) {
         set_heading(target_rotation, rot_tolerance);
         PID turn(PID_TURN_PARAMS), forward(PID_LINEAR_PARAMS);
@@ -131,7 +136,7 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
         forward.init(-distance(relative_x, relative_y), 0);
         while (distance(relative_x, relative_y) > dist_tolerance) {
             double fwd_power = powercap(forward.output(-distance(relative_x, relative_y)));
-            double turn_power = turn.output(rotation()) * adjustment_dampening;
+            double turn_power = turn.output(rotation()) * adjustment_dampening * sigmoid(distance(relative_x, relative_y));
             left.spin(vex::fwd, fwd_power - turn_power, vex::pct);
             right.spin(vex::fwd, fwd_power + turn_power, vex::pct);
             relative_x = target_x - x(), relative_y = target_y - y();
@@ -145,7 +150,7 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
         backward.init(distance(relative_x, relative_y), 0);
         while (distance(relative_x, relative_y) > dist_tolerance) {
             double bwd_power = powercap(backward.output(distance(relative_x, relative_y)));
-            double turn_power = turn.output(rotation()) * adjustment_dampening;
+            double turn_power = turn.output(rotation()) * adjustment_dampening * sigmoid(distance(relative_x, relative_y));
             left.spin(vex::fwd, bwd_power - turn_power, vex::pct);
             right.spin(vex::fwd, bwd_power + turn_power, vex::pct);
             relative_x = target_x - x(), relative_y = target_y - y();
@@ -215,7 +220,7 @@ double powercap(double power) {
     }
     power = fabs(power);
     power = std::max(0.25, power);
-    power = std::min(10.0, power);
+    power = std::min(20.0, power);
     if (neg) {
         power = -power;
     }
