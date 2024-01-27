@@ -61,8 +61,10 @@ int main(int argc, const char * argv[]) {
     init();
     vex::thread tracking(track);
     vex::thread displaying(display);
-    // bwd(100);
-    turn(90 DEG);
+    vexDelay(1000);
+    // fwd(100);
+    bwd(100);
+    // turn(90 DEG);
     // autonomous();
     vex::thread control(controlling);
 }
@@ -220,7 +222,7 @@ double powercap(double power) {
     }
     power = fabs(power);
     power = std::max(0.25, power);
-    power = std::min(20.0, power);
+    power = std::min(100.0, power);
     if (neg) {
         power = -power;
     }
