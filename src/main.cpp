@@ -4,6 +4,8 @@
 #include <vex.h>
 #include <pid.hpp>
 
+#define MAX_POWER 75.0
+
 // DEVICES
 
     vex::brain brain;
@@ -28,6 +30,8 @@
     vex::motor_group right(right_motor_1, right_motor_2, right_motor_3);
     vex::motor_group left(left_motor_1, left_motor_2, left_motor_3);
 
+    vex::competition competition;
+
 // unit conversions
 const double rad_to_deg = 180 / M_PI;
 const double deg_to_rad = 1 / rad_to_deg;
@@ -37,7 +41,7 @@ const double deg_to_rad = 1 / rad_to_deg;
 // drivetrain parameters
 #define BASE_WIDTH 31.7 // centimeters
 #define WHEEL_RADIUS 4.15 // centimeters
-#define PID_TURN_PARAMS 6.5, 0.01, 0.8, 0.999 // parameter pack (kp, ki, kd, ir)
+#define PID_TURN_PARAMS 30, 0.01, 0.8, 0.999 // parameter pack (kp, ki, kd, ir)
 #define PID_LINEAR_PARAMS 1.25, 0.0002, 0.05, 0.999 // parameter pack (kp, ki, kd, ir)
 
 // odometry and motion functions
@@ -49,32 +53,295 @@ int track();
 void set_heading(double heading, double rot_tolerance = 0.0174532925199);
 void move(double x, double y, double dist_tolerance = 3, double rot_tolerance = 0.0174532925199);
 int display();
-int controlling();
+void controlling();
 void init();
 void turn(double angle);
 void fwd(double dist);
 void bwd(double dist);
 double powercap(double power);
-void autonomous();
+void autonomous(void);
+inline void setWeirdoMotor();
+inline void setNormalMotor();
+void autonomous_selector(std::string mode);
+inline void auton_near();
+inline void auton_far();
+inline void auton_far_rr();
+inline void auton_skills();
 
 int main(int argc, const char * argv[]) {
     init();
-    vex::thread tracking(track);
+    vex::thread odometry(track);
     vex::thread displaying(display);
-    vexDelay(1000);
-    // fwd(100);
-    bwd(100);
-    // turn(90 DEG);
-    // autonomous();
-    vex::thread control(controlling);
+    competition.autonomous(autonomous);
+    competition.drivercontrol(controlling);
+    while (true) {
+        vex::wait(100, vex::msec);
+    }
 }
 
-void autonomous() {
-    front_wings.open();
-    vexDelay(200);
+void autonomous(void) {
+    vex::thread lifter (
+        [] () -> void {
+            lift.open();
+            vexDelay(250);
+            lift.close();
+        }
+    );
+    autonomous_selector("near");
+}
+
+inline void setWeirdoMotor() {
+    right_motor_1.setReversed(true);
+    right_motor_2.setReversed(true);
+    right_motor_3.setReversed(true);
+
+    left_motor_1.setReversed(false);
+    left_motor_2.setReversed(false);
+    left_motor_3.setReversed(false);
+}
+
+inline void setNormalMotor() {
+    right_motor_1.setReversed(false);
+    right_motor_2.setReversed(false);
+    right_motor_3.setReversed(false);
+
+    left_motor_1.setReversed(true);
+    left_motor_2.setReversed(true);
+    left_motor_3.setReversed(true);
+}
+
+
+/*
+mode is a lowercase string:
+- `near`: de-score and bar touch
+- `far`: 4-ball
+- ~`far_rr`: DO NOT USE~
+- `skills`: autonomous skills
+*/
+void autonomous_selector(std::string mode) {
+    if (mode == "near") {
+        auton_near();
+        return;
+    } else if (mode == "far") {
+        auton_far();
+        return;
+    } else if (mode == "far_rr") {
+        auton_far_rr();
+        return;
+    } else if (mode == "skills") {
+        auton_skills();
+        return;
+    }
+}
+
+inline void auton_near() {
+    fwd(40);
+    back_wings.open();
+    bwd(20);
+    turn(45 DEG);
+    back_wings.close();
+    turn(-45 DEG);
+    fwd(45);
+    turn(-45 DEG);
     left.spin(vex::fwd, 100, vex::pct);
-    right.spin(vex::fwd, 80, vex::pct);
+    right.spin(vex::fwd, 100, vex::pct);
+    vexDelay(700);
+    left.stop();
+    right.stop();
+    bwd(30);
+    turn(45 DEG);
+    bwd(73);
+    turn(45 DEG);
+    bwd(79);
+}
+
+inline void auton_far() {
+    fwd(133);
+    back_wings.open();
+    turn(-85 DEG);
+    back_wings.close();
+    intake.spin(vex::fwd, 100, vex::pct);
+    vexDelay(300);
+    intake.stop();
+    left.spin(vex::fwd, 100, vex::pct);
+    right.spin(vex::fwd, 100, vex::pct);
+    vexDelay(300);
+    bwd(20);
+    turn(-150 DEG);
+
+    rotation_value=0;
+    intake.spin(vex::fwd, -100, vex::pct);
+    fwd(60);
+    vexDelay(100);
+    bwd(40);
+    turn(180 DEG);
+    rotation_value=0;
+    intake.spin(vex::fwd, 100, vex::pct);
+    vexDelay(500);
+    intake.stop();
+
+    turn(130 DEG);
+    rotation_value=0;
+    intake.spin(vex::fwd, -100, vex::pct);
+    fwd(48);
+    rotation_value = 0;
+    turn(30 DEG);
+    back_wings.open();
+    intake.stop();
+    left.spin(vex::fwd, -100, vex::pct);
+    right.spin(vex::fwd, -100, vex::pct);
     vexDelay(1000);
+    fwd(20);
+    back_wings.close();
+    turn(180 DEG);
+    intake.spin(vex::fwd, 100, vex::pct);
+    vexDelay(200);
+
+    left.spin(vex::fwd, 100, vex::pct);
+    right.spin(vex::fwd, 100, vex::pct);
+    vexDelay(300);
+}
+
+inline void auton_far_rr() {
+    fwd(133);
+    back_wings.open();
+    turn(-85 DEG);
+    back_wings.close();
+    intake.spin(vex::fwd, 100, vex::pct);
+    vexDelay(300);
+    intake.stop();
+    left.spin(vex::fwd, 100, vex::pct);
+    right.spin(vex::fwd, 100, vex::pct);
+    vexDelay(300);
+    bwd(20);
+    turn(-150 DEG);
+
+    rotation_value=0;
+    intake.spin(vex::fwd, -100, vex::pct);
+    fwd(60);
+    vexDelay(100);
+    bwd(40);
+    turn(180 DEG);
+    rotation_value=0;
+    intake.spin(vex::fwd, 100, vex::pct);
+    vexDelay(200);
+    turn(180 DEG);
+    back_wings.open();
+    left.spin(vex::fwd, -100, vex::pct);
+    right.spin(vex::fwd, -100, vex::pct);
+    vexDelay(1000);
+
+
+    fwd(20);
+    back_wings.close();
+    rotation_value=0;
+    turn(-45);
+    rotation_value=0;
+    fwd(100);
+    turn(45);
+	rotation_value=0;
+
+    front_wings.open();
+    intake.stop();
+    left.spin(vex::fwd, 100, vex::pct);
+    right.spin(vex::fwd, 100, vex::pct);
+    vexDelay(1000);
+
+}
+
+inline void auton_skills() {
+    catapult.spin(vex::fwd, 100, vex::pct);
+    vexDelay(32.64 * 1000);
+
+    fwd(10);
+    turn(-45 DEG);
+    fwd(65);
+    turn(45 DEG);
+
+    catapult.spin(vex::fwd, 10, vex::pct);
+    intake.spin(vex::fwd, 100, vex::pct);
+    fwd(210);
+    catapult.spin(vex::fwd, 0, vex::pct);
+    intake.stop();
+    turn(45 DEG);
+    front_wings.open();
+    turn(45 DEG);
+    front_wings.close();
+    turn(180 DEG);
+    back_wings.open();
+    left.spin(vex::fwd, 100, vex::pct);
+    right.spin(vex::fwd, 100, vex::pct);
+    vexDelay(300);
+    bwd(10);
+    turn(-45 DEG);
+
+    bwd(60);
+    turn(60 DEG);
+    back_wings.close();
+
+    left.spin(vex::fwd, -100, vex::pct);
+    right.spin(vex::fwd, -100, vex::pct);
+    vexDelay(1000);
+    left.spin(vex::fwd, 100, vex::pct);
+    right.spin(vex::fwd, 100, vex::pct);
+    vexDelay(200);
+    back_wings.close();
+    // turn(-20 DEG);
+    left.spin(vex::fwd, -100, vex::pct);
+    right.spin(vex::fwd, -100, vex::pct);
+    vexDelay(1000);
+    left.spin(vex::fwd, 100, vex::pct);
+    right.spin(vex::fwd, 100, vex::pct);
+    vexDelay(200);
+    // turn(20 DEG);
+    left.spin(vex::fwd, -100, vex::pct);
+    right.spin(vex::fwd, -100, vex::pct);
+    vexDelay(1000);
+    left.spin(vex::fwd, 100, vex::pct);
+    right.spin(vex::fwd, 100, vex::pct);
+    vexDelay(200);
+    // turn(-20 DEG);
+    left.spin(vex::fwd, -100, vex::pct);
+    right.spin(vex::fwd, -100, vex::pct);
+    vexDelay(1000);
+    fwd(50);
+    turn(45 DEG);
+    bwd(140);
+
+    turn(-135 DEG);
+
+    back_wings.open();
+
+    left.spin(vex::fwd, -100, vex::pct);
+    right.spin(vex::fwd, -100, vex::pct);
+    vexDelay(2000);
+    left.spin(vex::fwd, 100, vex::pct);
+    right.spin(vex::fwd, 100, vex::pct);
+    vexDelay(200);
+    // turn(-20 DEG);
+    left.spin(vex::fwd, -100, vex::pct);
+    right.spin(vex::fwd, -100, vex::pct);
+    vexDelay(2000);
+    left.spin(vex::fwd, 100, vex::pct);
+    right.spin(vex::fwd, 100, vex::pct);
+    vexDelay(200);
+    // turn(20 DEG);
+    left.spin(vex::fwd, -100, vex::pct);
+    right.spin(vex::fwd, -100, vex::pct);
+    vexDelay(2000);
+    left.spin(vex::fwd, 100, vex::pct);
+    right.spin(vex::fwd, 100, vex::pct);
+    vexDelay(200);
+    // turn(-20 DEG);
+    left.spin(vex::fwd, -100, vex::pct);
+    right.spin(vex::fwd, -100, vex::pct);
+    vexDelay(2000);
+    left.spin(vex::fwd, 100, vex::pct);
+    right.spin(vex::fwd, 100, vex::pct);
+    vexDelay(500);
+
+    back_wings.close();
+
 }
 
 // Set the heading to a specified value (accounts for coterminality)
@@ -98,6 +365,7 @@ void set_heading(double heading, double rot_tolerance) {
 }
 // Move the robot to (`target_x`, `target_y`) in Cartesian coordinates
 void move(double target_x, double target_y, double dist_tolerance, double rot_tolerance) {
+    auto start = std::chrono::steady_clock::now(); // Start the timer
     auto distance = [] (double x, double y) -> double {
         return pow(x * x + y * y, 0.5);
     };
@@ -126,7 +394,7 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
         }
     };
     auto sigmoid = [] (double x) -> double {
-        return 1 / (1 + pow(M_E, -5 * (x - 2)));
+        return 1 / (1 + pow(M_E, -5 * (x - 5)));
     };
     double relative_x = target_x - x(), relative_y = target_y - y();
     double target_rotation = nearest_coterminal(rotation(), get_heading(relative_x, relative_y));
@@ -137,10 +405,15 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
         turn.init(rotation(), target_rotation);
         forward.init(-distance(relative_x, relative_y), 0);
         while (distance(relative_x, relative_y) > dist_tolerance) {
+            auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::seconds>(now - start).count() >= 3) {
+                // If more than 3 seconds have passed, break out of the loop
+                break;
+            }
             double fwd_power = powercap(forward.output(-distance(relative_x, relative_y)));
             double turn_power = turn.output(rotation()) * adjustment_dampening * sigmoid(distance(relative_x, relative_y));
-            left.spin(vex::fwd, fwd_power - turn_power, vex::pct);
-            right.spin(vex::fwd, fwd_power + turn_power, vex::pct);
+            left.spin(vex::fwd, fwd_power + turn_power, vex::pct);
+            right.spin(vex::fwd, fwd_power - turn_power, vex::pct);
             relative_x = target_x - x(), relative_y = target_y - y();
             turn.change_target(nearest_coterminal(rotation(), get_heading(relative_x, relative_y)));
             vex::this_thread::sleep_for(10);
@@ -151,6 +424,11 @@ void move(double target_x, double target_y, double dist_tolerance, double rot_to
         turn.init(rotation(), target_rotation + M_PI);
         backward.init(distance(relative_x, relative_y), 0);
         while (distance(relative_x, relative_y) > dist_tolerance) {
+            auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::seconds>(now - start).count() >= 3) {
+                // If more than 3 seconds have passed, break out of the loop
+                break;
+            }
             double bwd_power = powercap(backward.output(distance(relative_x, relative_y)));
             double turn_power = turn.output(rotation()) * adjustment_dampening * sigmoid(distance(relative_x, relative_y));
             left.spin(vex::fwd, bwd_power - turn_power, vex::pct);
@@ -173,8 +451,11 @@ void turn(double angle) {
 
 // Move `dist` centimeters forward at current heading
 void fwd(double dist) {
-    double theta = rotation();
-    move(x() + dist * cos(theta), y() + dist * sin(theta));
+    setWeirdoMotor();
+    bwd(dist);
+    setNormalMotor();
+    // double theta = rotation();
+    // move(x() + dist * cos(theta), y() + dist * sin(theta));
 }
 
 // Move `dist` centimeters backward at current heading
@@ -195,6 +476,7 @@ void init() {
     right_motor_1.resetPosition();
     right_motor_2.resetPosition();
     right_motor_3.resetPosition();
+    competition.bStopAllTasksBetweenModes = true;
 }
 
 /*
@@ -222,7 +504,7 @@ double powercap(double power) {
     }
     power = fabs(power);
     power = std::max(0.25, power);
-    power = std::min(100.0, power);
+    power = std::min(MAX_POWER, power);
     if (neg) {
         power = -power;
     }
@@ -239,9 +521,11 @@ Controller binds:
  - R1 -> Intake out (hold)
  - R2 -> Intake in (hold)
  - A -> Lift (toggle)
- - B -> Elevation (toggle)
+ - B -> Back wings (toggle)
+ - X -> Elevation (toggle)
 */
-int controlling() {
+void controlling() {
+    setNormalMotor();
     bool lastL1State = 0;
     bool toggleWings = 0;
 
@@ -250,6 +534,9 @@ int controlling() {
 
     bool lastBState = 0;
     bool toggleElevation = 0;
+
+    bool lastXState = 0;
+    bool toggleBackWings = 0;
 
     while (true) {
         double fwdpower = controller.Axis3.position();
@@ -289,7 +576,7 @@ int controlling() {
         lastAState = controller.ButtonA.pressing();
 
         // toggleLift
-        if(controller.ButtonB.pressing() != lastBState && lastBState != 1){
+        if(controller.ButtonX.pressing() != lastXState && lastXState != 1){
             if(toggleElevation){
                 toggleElevation = 0;
             } else{
@@ -302,6 +589,22 @@ int controlling() {
         } else {
             elevation.close();
         }
+        lastXState = controller.ButtonX.pressing();
+
+        // toggleLift
+        if(controller.ButtonB.pressing() != lastBState && lastBState != 1){
+            if(toggleBackWings){
+                toggleBackWings = 0;
+            } else{
+                toggleBackWings = 1;
+            }
+        }
+        if (toggleBackWings) {
+            back_wings.open();
+
+        } else {
+            back_wings.close();
+        }
         lastBState = controller.ButtonB.pressing();
 
         if(controller.ButtonL2.pressing()) {
@@ -309,6 +612,7 @@ int controlling() {
         }
         else {
             catapult.spin(vex::fwd, 0, vex::pct);
+            catapult.stop(vex::brakeType::hold);
         }
 
         // intake
@@ -326,7 +630,7 @@ int controlling() {
         
         vex::this_thread::sleep_for(10);
     }
-    return 0;
+    return;
 }
 
 // Display debug information
